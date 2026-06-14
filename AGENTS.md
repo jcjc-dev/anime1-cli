@@ -167,8 +167,8 @@ git worktree remove ../anime1-cli-<branch>
 
 ## Git conventions
 
-- Do **not** add `Co-authored-by` AI trailers to commits (the repo owner's hook
-  strips them).
+- Do **not** add `Co-authored-by` AI trailers to commits (a commit hook strips
+  them).
 - Keep `.gitignore` excluding `node_modules/`, `dist/`, `coverage/`,
   `downloads/`, and partial-download files (`*.part` and segment files).
 - `main` is protected: pull requests are required (no direct pushes), no force
