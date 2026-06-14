@@ -138,3 +138,36 @@ over silencing type/lint errors.
   strips them).
 - Keep `.gitignore` excluding `node_modules/`, `dist/`, `coverage/`,
   `downloads/`, and partial-download files (`*.part` and segment files).
+- `main` is protected: no force pushes, no deletions, linear history. Merges are
+  squash-only. Do not rewrite published history.
+
+## Releasing
+
+Releases are driven by the version in the root `package.json` and run through
+`.github/workflows/publish.yml` (the "Release" workflow). Do not publish to npm
+by hand.
+
+To cut a release:
+
+1. `npm run version:set 0.1.2` (or a prerelease like `0.2.0-beta.1`). This bumps
+   the root, `anime1-core`, and `anime1-cli` versions, updates the cli's
+   `anime1-core` dependency, and syncs the lockfile.
+2. Commit and push to `main`.
+3. The Release workflow detects the changed version and, only if no matching tag
+   exists, runs `validate` (lint + build + test), then tags, publishes both
+   packages to npm with provenance, and creates a GitHub Release. Nothing is
+   published unless validation passes.
+
+Notes:
+
+- The two packages are versioned in lockstep; keep all three `package.json`
+  versions equal (the publish job fails fast if they drift).
+- A prerelease version (a hyphen in the semver) publishes to the npm `beta`
+  dist-tag instead of `latest`.
+- `anime1-core` publishes before `anime1-cli` because the cli depends on it.
+- The npm trusted publisher (OIDC) is bound to the filename `publish.yml` and an
+  empty environment. Renaming the workflow or adding a job `environment:` breaks
+  publishing until the trusted publisher config is updated on npmjs.com.
+- `pr-gate.yml` runs lint + build + test on every PR and push across an
+  OS/Node matrix; keep it green.
+
