@@ -1,8 +1,6 @@
-import { SITE } from './constants.js';
+import { MAX_CATEGORY_PAGES, SITE } from './constants.js';
 import { httpRequest } from './http.js';
 import type { Episode, NetOptions } from './types.js';
-
-const MAX_PAGES = 60;
 
 /**
  * Loads every episode for a category, following pagination for long-running series.
@@ -14,13 +12,33 @@ export async function fetchEpisodes(catId: number, net: NetOptions = {}): Promis
   }
   const html = await res.text();
   const episodes = parseEpisodes(html);
+  // A substantial page that yields zero episodes almost always means the site
+  // markup changed and our parser needs updating — distinct from an empty
+  // category. Make that diagnosable instead of surfacing as "no episodes".
+  if (episodes.length === 0 && looksLikeContentPage(html)) {
+    throw new Error(
+      `Loaded category ${catId} (${html.length} bytes) but found no recognizable episodes. ` +
+        'anime1.me markup may have changed — the parser likely needs updating.',
+    );
+  }
 
   const { root, maxPage } = parsePagination(html);
   if (root && maxPage > 1) {
-    for (let page = 2; page <= Math.min(maxPage, MAX_PAGES); page++) {
-      const pageRes = await httpRequest(`${root}page/${page}`, { net });
+    const siteOrigin = new URL(SITE).origin;
+    const lastPage = Math.min(maxPage, MAX_CATEGORY_PAGES);
+    for (let page = 2; page <= lastPage; page++) {
+      const pageUrl = safeSameOriginUrl(root, page, siteOrigin);
+      if (!pageUrl) break; // pagination link points off-site; stop crawling.
+      const pageRes = await httpRequest(pageUrl, { net });
       if (!pageRes.ok) break;
       episodes.push(...parseEpisodes(await pageRes.text()));
+    }
+    if (maxPage > MAX_CATEGORY_PAGES) {
+      // Visible signal instead of silent truncation. Core has no logger, so we
+      // surface it on stderr; the engine stays UI-agnostic (no formatting).
+      process.stderr.write(
+        `anime1-core: category has ${maxPage} pages; only the first ${MAX_CATEGORY_PAGES} were fetched.\n`,
+      );
     }
   }
   return dedupeAndSort(episodes);
@@ -51,6 +69,28 @@ export function parsePagination(html: string): { root: string | null; maxPage: n
     if (!root) root = match[1].replace(/page\/\d+\/?$/, '');
   }
   return { root, maxPage };
+}
+
+/**
+ * Heuristic: did we fetch a real content page (vs an empty/blocked stub)? Used
+ * to tell "site markup changed, parser broke" apart from "category is empty".
+ */
+export function looksLikeContentPage(html: string): boolean {
+  return html.length > 1024 && /<article|entry-title|vjscontainer/i.test(html);
+}
+
+/**
+ * Resolves a paginated category URL and returns it only when it stays on the
+ * trusted site origin. A pagination href that points at another host (poisoned
+ * or MITM'd markup) returns null so we never crawl off-site with auth cookies.
+ */
+function safeSameOriginUrl(root: string, page: number, siteOrigin: string): string | null {
+  try {
+    const url = new URL(`${root}page/${page}`, siteOrigin);
+    return url.origin === siteOrigin ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function stripTags(value: string): string {
