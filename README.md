@@ -20,7 +20,13 @@ Node.js 20 or newer.
 
 ## Install
 
-It is not on npm yet, so build it from source:
+```sh
+npm install -g anime1-cli
+```
+
+That puts an `anime1` command on your PATH. Then just run `anime1`.
+
+If you would rather build from source:
 
 ```sh
 git clone https://github.com/jcjc-dev/anime1-cli.git
@@ -30,7 +36,7 @@ npm run build
 cd packages/cli && npm link
 ```
 
-That puts an `anime1` command on your PATH. If you would rather not link it globally, you can run it straight from the repo with `npm run dev`.
+Either way you end up with the `anime1` command. From a source checkout you can also run it without linking, using `npm run dev`.
 
 ## Usage
 
