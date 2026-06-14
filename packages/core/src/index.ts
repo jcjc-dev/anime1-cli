@@ -7,7 +7,6 @@ export type { DownloadOptions, DownloadProgress, Segment } from './download.js';
 export { fetchCatalog } from './catalog.js';
 export {
   parseAnimeRow,
-  splitCompound,
   listYears,
   listSeasons,
   filterByYearSeason,

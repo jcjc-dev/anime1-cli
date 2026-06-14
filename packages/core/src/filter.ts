@@ -41,13 +41,6 @@ function extractYears(value: string): string[] {
   return [...set];
 }
 
-export function splitCompound(value: string): string[] {
-  return value
-    .split('/')
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
-
 export function listYears(animes: Anime[]): string[] {
   const set = new Set<string>();
   for (const anime of animes) {
