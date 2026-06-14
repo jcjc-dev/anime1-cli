@@ -23,6 +23,7 @@ import type { Anime, Episode, NetOptions } from 'anime1-core';
 import { MAX_CONCURRENCY, VERSION } from './constants.js';
 import { askOutputDir, pickEpisodes, pickSeason, pickSeries, pickYear } from './prompts.js';
 import { createSpinner, createProgressBar } from './ui.js';
+import { parseMinInterval, resolveBaseDir, resolveSeriesDir } from './args.js';
 
 interface CliOptions {
   year?: string;
@@ -69,7 +70,7 @@ program
   .parse();
 
 const opts = program.opts<CliOptions>();
-setMinRequestInterval(Number(opts.minInterval));
+setMinRequestInterval(parseMinInterval(opts.minInterval, DEFAULT_MIN_REQUEST_INTERVAL_MS));
 const net: NetOptions = { userAgent: opts.userAgent, cfClearance: opts.cfClearance };
 const connections = Math.min(Math.max(1, Number(opts.connections) || 1), MAX_CONNECTIONS);
 const isTty = process.stdout.isTTY === true;
@@ -174,12 +175,12 @@ async function chooseEpisodes(episodes: Episode[]): Promise<Episode[]> {
 
 async function resolveOutDir(series: Anime | null): Promise<string> {
   let base = opts.out;
-  if (!base && isTty && !opts.all) {
+  if (!resolveBaseDir(base, '') && isTty && !opts.all) {
     base = await askOutputDir('./downloads');
   }
-  base = base ?? './downloads';
+  const resolvedBase = resolveBaseDir(base, './downloads');
   const sub = series ? sanitizeFilename(series.title) : '';
-  return resolve(sub ? `${base}/${sub}` : base);
+  return resolveSeriesDir(resolvedBase, sub);
 }
 
 async function extractEpisodes(episodes: Episode[]): Promise<void> {
