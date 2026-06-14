@@ -1,5 +1,10 @@
 # anime1-cli
 
+[![Publish](https://github.com/jcjc-dev/anime1-cli/actions/workflows/publish.yml/badge.svg)](https://github.com/jcjc-dev/anime1-cli/actions/workflows/publish.yml)
+[![npm](https://img.shields.io/npm/v/anime1-cli?label=anime1-cli)](https://www.npmjs.com/package/anime1-cli)
+[![npm](https://img.shields.io/npm/v/anime1-core?label=anime1-core)](https://www.npmjs.com/package/anime1-core)
+[![license](https://img.shields.io/npm/l/anime1-cli)](./LICENSE)
+
 A command line tool for browsing [anime1.me](https://anime1.me) by year and season and downloading episodes. Written in TypeScript, runs on Node, and needs nothing else installed.
 
 I made this because the existing options were either browser userscripts or Python scripts that pulled in yt-dlp and ffmpeg. This one only needs Node, and it lets you browse the catalogue by season instead of hunting down a URL to paste in.
