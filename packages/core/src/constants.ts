@@ -17,6 +17,13 @@ export const MAX_CONNECTIONS = 8;
 /** Only split a file into segments when it is at least this large (bytes). */
 export const MIN_SEGMENT_SIZE = 5 * 1024 * 1024;
 
+/**
+ * Safety cap on how many category pages to crawl for one series, so a malformed
+ * or hostile pagination block can't drive an unbounded crawl. Surfaced to the
+ * caller when hit (see fetchEpisodes) rather than silently truncating.
+ */
+export const MAX_CATEGORY_PAGES = 60;
+
 export const SEASON_CHARS = ['春', '夏', '秋', '冬'] as const;
 
 export const SEASON_EN: Record<string, string> = {

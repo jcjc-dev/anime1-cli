@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseEpisodes, parsePagination } from '../src/resolver.js';
+import { looksLikeContentPage, parseEpisodes, parsePagination } from '../src/resolver.js';
 
 const TWO_EPISODES = `
 <main>
@@ -60,5 +60,16 @@ describe('parsePagination', () => {
 
   it('reports a single page when there are no pagination links', () => {
     expect(parsePagination('<div>no pages here</div>')).toEqual({ root: null, maxPage: 1 });
+  });
+});
+
+describe('looksLikeContentPage', () => {
+  it('treats a substantial page with known markers as a content page', () => {
+    const html = '<div>' + 'x'.repeat(1100) + '<article class="vjscontainer"></article></div>';
+    expect(looksLikeContentPage(html)).toBe(true);
+  });
+  it('treats a short/empty stub as not a content page', () => {
+    expect(looksLikeContentPage('')).toBe(false);
+    expect(looksLikeContentPage('<html><body>blocked</body></html>')).toBe(false);
   });
 });
