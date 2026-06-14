@@ -132,6 +132,39 @@ over silencing type/lint errors.
   delete any downloaded files afterward.
 - Add or update tests whenever you change pure logic.
 
+## Making changes
+
+`main` is protected, so every change goes through a pull request, and each change
+is made in its own git worktree branched off the latest remote `main`. Do not
+edit on `main` directly and do not switch branches in place in the primary
+checkout.
+
+Start every change by pulling the latest remote `main` and branching a worktree
+off it:
+
+```sh
+git fetch origin
+git worktree add -b <branch> ../anime1-cli-<branch> origin/main
+cd ../anime1-cli-<branch>
+npm ci
+```
+
+Branching off `origin/main` (after `git fetch`) is required, so the work always
+starts from the latest pushed state, not from whatever the primary checkout
+happens to be on. Make the edits there, then commit and push the branch:
+
+```sh
+git commit -am "<message>"
+git push -u origin <branch>
+```
+
+Open a pull request and squash-merge it once the `PR gate passed` check is green
+(no approval is required). After it merges, clean up the worktree:
+
+```sh
+git worktree remove ../anime1-cli-<branch>
+```
+
 ## Git conventions
 
 - Do **not** add `Co-authored-by` AI trailers to commits (the repo owner's hook
