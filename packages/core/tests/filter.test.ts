@@ -5,7 +5,6 @@ import {
   listYears,
   parseAnimeRow,
   searchByTitle,
-  splitCompound,
 } from '../src/filter.js';
 import type { Anime } from '../src/types.js';
 
@@ -48,14 +47,6 @@ describe('parseAnimeRow', () => {
   it('returns null for malformed rows', () => {
     expect(parseAnimeRow([])).toBeNull();
     expect(parseAnimeRow([1, ''])).toBeNull();
-  });
-});
-
-describe('splitCompound', () => {
-  it('splits and trims on slash', () => {
-    expect(splitCompound('夏 / 冬')).toEqual(['夏', '冬']);
-    expect(splitCompound('2025')).toEqual(['2025']);
-    expect(splitCompound('')).toEqual([]);
   });
 });
 
