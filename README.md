@@ -146,12 +146,28 @@ anime1 --user-agent "Mozilla/5.0 ..." --cf-clearance "<cookie value>"
 
 ## Development
 
+This repository is an npm-workspaces monorepo:
+
+- **`@anime1/core`** (`packages/core`) — the reusable, UI-agnostic engine
+  (catalog, filtering, episode resolution, downloading). No CLI/UI dependencies,
+  so it can back other frontends (web, desktop) too.
+- **`anime1-cli`** (`packages/cli`) — the terminal frontend that provides the
+  `anime1` command.
+
+Run the scripts from the repo root:
+
 ```sh
 npm install
-npm run dev      # run from source with tsx
-npm run build    # compile TypeScript to dist/
-npm run lint     # type-check + eslint
-npm test         # run unit tests (vitest)
+npm run dev      # build core, then run the CLI from source with tsx
+npm run build    # compile both packages
+npm run lint     # type-check + eslint across packages
+npm test         # run unit tests (vitest) in all packages
+```
+
+Using the engine directly:
+
+```ts
+import { fetchCatalog, fetchEpisodes, resolveSource, downloadSource } from '@anime1/core';
 ```
 
 ## Notes

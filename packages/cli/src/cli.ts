@@ -1,16 +1,28 @@
 #!/usr/bin/env node
 import { resolve } from 'node:path';
 import { Command } from 'commander';
-import { resolveSource } from './api.js';
-import { fetchCatalog } from './catalog.js';
-import { SEASON_ALIAS, SEASON_EN, MAX_CONCURRENCY, MAX_CONNECTIONS, DEFAULT_CONNECTIONS, DEFAULT_MIN_REQUEST_INTERVAL_MS, VERSION } from './constants.js';
-import { downloadSource, extensionFromType, sanitizeFilename } from './download.js';
-import { filterByYearSeason, listSeasons, listYears, searchByTitle } from './filter.js';
+import {
+  fetchCatalog,
+  fetchEpisodes,
+  resolveSource,
+  downloadSource,
+  extensionFromType,
+  sanitizeFilename,
+  filterByYearSeason,
+  listSeasons,
+  listYears,
+  searchByTitle,
+  normalizeSeason,
+  setMinRequestInterval,
+  SEASON_EN,
+  DEFAULT_CONNECTIONS,
+  MAX_CONNECTIONS,
+  DEFAULT_MIN_REQUEST_INTERVAL_MS,
+} from '@anime1/core';
+import type { Anime, Episode, NetOptions } from '@anime1/core';
+import { MAX_CONCURRENCY, VERSION } from './constants.js';
 import { askOutputDir, pickEpisodes, pickSeason, pickSeries, pickYear } from './prompts.js';
-import { fetchEpisodes } from './resolver.js';
-import { setMinRequestInterval } from './http.js';
 import { createSpinner, createProgressBar } from './ui.js';
-import type { Anime, Episode, NetOptions } from './types.js';
 
 interface CliOptions {
   year?: string;
@@ -266,14 +278,6 @@ function printList(catalog: Anime[]): void {
       }
     }
   }
-}
-
-function normalizeSeason(input: string): string {
-  const mapped = SEASON_ALIAS[input.trim().toLowerCase()] ?? SEASON_ALIAS[input.trim()];
-  if (!mapped) {
-    throw new Error(`Unknown season "${input}". Use spring|summer|autumn|winter or 春/夏/秋/冬.`);
-  }
-  return mapped;
 }
 
 async function runPool<T>(

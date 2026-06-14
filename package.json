@@ -1,31 +1,22 @@
 {
-  "name": "anime1-cli",
+  "name": "anime1",
   "version": "0.1.0",
-  "description": "Interactive CLI to browse anime1.me by year and season and download episodes. Self-contained, no system dependencies.",
+  "description": "Monorepo for anime1-cli: a CLI and a reusable engine (@anime1/core) to browse and download from anime1.me.",
   "license": "MIT",
+  "private": true,
   "type": "module",
-  "bin": {
-    "anime1": "./dist/cli.js"
-  },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
+  "workspaces": [
+    "packages/*"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "dev": "tsx src/cli.ts",
-    "lint": "tsc -p tsconfig.json --noEmit && eslint src",
-    "test": "vitest run",
-    "start": "node dist/cli.js",
-    "prepack": "npm run build"
-  },
-  "dependencies": {
-    "@inquirer/prompts": "^7.2.0",
-    "commander": "^12.1.0"
+    "build": "npm run build -w @anime1/core && npm run build -w anime1-cli",
+    "lint": "npm run build -w @anime1/core && npm run lint -w @anime1/core && npm run lint -w anime1-cli",
+    "test": "npm run test --workspaces --if-present",
+    "dev": "npm run build -w @anime1/core && npm run dev -w anime1-cli",
+    "start": "npm run start -w anime1-cli"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

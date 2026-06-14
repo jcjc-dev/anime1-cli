@@ -1,0 +1,29 @@
+{
+  "name": "anime1-cli",
+  "version": "0.1.0",
+  "description": "Interactive CLI to browse anime1.me by year and season and download episodes. Self-contained, no system dependencies.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "anime1": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "lint": "tsc -p tsconfig.json --noEmit && eslint src",
+    "test": "vitest run",
+    "start": "node dist/cli.js",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@anime1/core": "*",
+    "@inquirer/prompts": "^7.2.0",
+    "commander": "^12.1.0"
+  }
+}

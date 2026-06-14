@@ -1,5 +1,3 @@
-export const VERSION = '0.1.0';
-
 export const SITE = 'https://anime1.me';
 export const CATALOG_URL = 'https://anime1.me/animelist.json';
 export const API_URL = 'https://v.anime1.me/api';
@@ -9,9 +7,6 @@ export const DEFAULT_USER_AGENT =
 
 /** Minimum spacing between outbound requests, to avoid bursting the site/CDN. */
 export const DEFAULT_MIN_REQUEST_INTERVAL_MS = 250;
-
-/** Hard cap on parallel downloads, regardless of what the user requests. */
-export const MAX_CONCURRENCY = 4;
 
 /** Default number of parallel connections used to download a single file. */
 export const DEFAULT_CONNECTIONS = 6;

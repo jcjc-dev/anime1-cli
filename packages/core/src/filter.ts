@@ -1,5 +1,14 @@
-import { SEASON_CHARS, SEASON_ORDER } from './constants.js';
+import { SEASON_ALIAS, SEASON_CHARS, SEASON_ORDER } from './constants.js';
 import type { Anime } from './types.js';
+
+/** Normalizes a season input (english alias or chinese character) to a season char. */
+export function normalizeSeason(input: string): string {
+  const mapped = SEASON_ALIAS[input.trim().toLowerCase()] ?? SEASON_ALIAS[input.trim()];
+  if (!mapped) {
+    throw new Error(`Unknown season "${input}". Use spring|summer|autumn|winter or 春/夏/秋/冬.`);
+  }
+  return mapped;
+}
 
 export function parseAnimeRow(row: unknown[]): Anime | null {
   if (!Array.isArray(row) || row.length < 5) return null;

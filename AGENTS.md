@@ -9,7 +9,16 @@ requirements below.
 `anime1-cli` is an interactive Node.js + TypeScript CLI that browses
 [anime1.me](https://anime1.me) by year and season and downloads episodes. It is
 **self-contained**: it depends only on Node.js and a couple of npm packages — no
-external system binaries. The CLI command is `anime1` (`bin` → `dist/cli.js`).
+external system binaries.
+
+This is an **npm-workspaces monorepo** with two packages:
+
+- **`@anime1/core`** (`packages/core`) — the UI-agnostic engine (catalog, filter,
+  resolver, api, download, http). No CLI/UI dependencies. Reusable by any
+  frontend (CLI, web, desktop).
+- **`anime1-cli`** (`packages/cli`) — the terminal frontend (`bin` → `anime1`):
+  `commander`, `@inquirer/prompts`, the progress UI, and orchestration. Depends
+  on `@anime1/core`.
 
 This tool is for **research and experimentation only** (see the README
 disclaimer). Do not add features that host/redistribute content or circumvent
@@ -17,17 +26,21 @@ access controls.
 
 ## Setup, build, and checks
 
+Run these from the **repo root** (they fan out to the workspaces):
+
 - Requires **Node.js >= 20**.
 - Install dependencies: `npm install`
-- Build (TypeScript → `dist/`): `npm run build`
-- Run from source: `npm run dev` (uses `tsx`)
+- Build (core, then cli): `npm run build`
+- Run from source: `npm run dev` (builds core, then runs the CLI via `tsx`)
 - Lint (type-check + eslint): `npm run lint`
-- Tests (vitest): `npm test`
+- Tests (vitest, all packages): `npm test`
 
-Always run `npm run lint` and `npm test` before finishing a change. Run
-`npm run build` afterward so the globally linked `anime1` command stays current
-(`npm link` points at `dist/`). Prefer fixing the root cause over silencing
-type/lint errors.
+`packages/core` must be built before `packages/cli` typechecks/builds, because
+the CLI consumes the engine's compiled types via `@anime1/core`; the root
+scripts handle that ordering. Always run `npm run lint` and `npm test` before
+finishing a change. After building, the globally linked `anime1` command
+(`npm link` from `packages/cli`) stays current. Prefer fixing the root cause
+over silencing type/lint errors.
 
 ## Hard requirements (do not break these)
 
@@ -39,31 +52,42 @@ type/lint errors.
    every run and held in memory only. Do not write catalog/data files to the
    user's home directory or anywhere on disk.
 3. **Stay a good citizen toward the site/CDN.** Preserve the polite networking in
-   `http.ts`: the min-interval rate gate, exponential backoff, and `Retry-After`
-   handling. Keep the caps (`MAX_CONCURRENCY`, `MAX_CONNECTIONS`). Do not
-   introduce bursty or aggressive defaults.
+   `packages/core/src/http.ts`: the min-interval rate gate, exponential backoff,
+   and `Retry-After` handling. Keep the caps (`MAX_CONNECTIONS` in core,
+   `MAX_CONCURRENCY` in the CLI). Do not introduce bursty or aggressive defaults.
 4. **Keep runtime dependencies minimal.** Prefer Node built-ins (`fetch`,
-   `node:fs`, `node:stream`, `node:readline`) over adding packages. Current
-   runtime deps: `commander` and `@inquirer/prompts` only.
+   `node:fs`, `node:stream`, `node:readline`) over adding packages. `@anime1/core`
+   has **zero** runtime deps; the CLI's only runtime deps are `commander` and
+   `@inquirer/prompts`.
+5. **Respect the package boundary.** `@anime1/core` must never import from the CLI
+   or any UI library. The CLI imports the engine via the `@anime1/core` package
+   entry (`packages/core/src/index.ts`), not by deep-importing core internals.
 
-## Architecture (`src/`)
+## Architecture
 
-- `cli.ts` — entry point / `bin`; `commander` flag parsing and orchestration.
+### `packages/core` — `@anime1/core` (engine, UI-agnostic)
+
+- `index.ts` — public API barrel; the only entry frontends should import.
 - `catalog.ts` — `fetchCatalog()`: GET `animelist.json` (in memory only).
 - `filter.ts` — parse catalog rows; group/sort by year + season (latest first);
-  split compound year/season values.
+  split compound year/season values; `normalizeSeason()`.
 - `resolver.ts` — `fetchEpisodes(catId)`: load `?cat=<id>` pages, follow
   pagination, parse each episode's `data-apireq`.
 - `api.ts` — `resolveSource(apiReq)`: POST to `v.anime1.me/api`; returns the MP4
   URL and the short-lived `e`/`h`/`p` cookies the CDN requires.
 - `download.ts` — segmented multi-connection download with resume; falls back to
   a single resumable stream when size is unknown or small.
+- `http.ts` — shared `fetch` wrapper: browser headers, retries, `Retry-After`,
+  and the global rate gate.
+- `constants.ts`, `types.ts` — engine constants and shared types.
+
+### `packages/cli` — `anime1-cli` (terminal frontend)
+
+- `cli.ts` — entry point / `bin`; `commander` flag parsing and orchestration.
 - `prompts.ts` — `@inquirer/prompts` interactive flows.
 - `ui.ts` — spinner and the in-place progress bar (speed/ETA, width-aware
   truncation so long CJK titles never wrap).
-- `http.ts` — shared `fetch` wrapper: browser headers, retries, `Retry-After`,
-  and the global rate gate.
-- `constants.ts`, `types.ts` — shared constants and types.
+- `constants.ts` — CLI-only constants (`VERSION`, `MAX_CONCURRENCY`).
 
 ## How the download flow works
 
@@ -82,21 +106,27 @@ type/lint errors.
 ## Code style and conventions
 
 - **ESM with `NodeNext`**: relative imports must include the `.js` extension
-  (e.g. `import { httpRequest } from './http.js'`).
+  (e.g. `import { httpRequest } from './http.js'`). The CLI imports the engine
+  from the bare specifier `@anime1/core`.
 - `verbatimModuleSyntax` is enabled: use `import type { ... }` for type-only
   imports.
 - TypeScript is strict (`noUnusedLocals`, `noUnusedParameters`,
   `noFallthroughCasesInSwitch`, etc.).
+- When you add a new public engine export, re-export it from
+  `packages/core/src/index.ts`.
 - Only comment code that genuinely needs clarification; avoid narrating obvious
   code.
 - Terminal output that updates in place must stay on a single line and be
-  width-aware (see `ui.ts`); never assume ASCII-only widths (CJK = 2 columns).
+  width-aware (see `packages/cli/src/ui.ts`); never assume ASCII-only widths
+  (CJK = 2 columns).
 
 ## Testing conventions
 
-- Unit tests live in `tests/*.test.ts` (vitest) and cover **pure logic**:
-  catalog/row parsing, year/season grouping, pagination parsing, segment
-  planning, and the progress/format helpers.
+- Unit tests live in each package's `tests/*.test.ts` (vitest) and cover **pure
+  logic**: catalog/row parsing, year/season grouping, pagination parsing, and
+  segment planning live in `packages/core`; the progress/format helpers live in
+  `packages/cli`. The CLI's vitest config aliases `@anime1/core` to the engine
+  source, so CLI tests run without a build.
 - Network-dependent code (`catalog`/`api`/`resolver`/`download` HTTP) is not unit
   tested; when verification is needed, exercise it against the live site and
   delete any downloaded files afterward.
