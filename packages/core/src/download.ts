@@ -29,7 +29,10 @@ export function sanitizeFilename(name: string): string {
     .trim()
     .slice(0, 180)
     .trim();
-  return cleaned || 'video';
+  // A title of "." or ".." (or only dots) would traverse directories when used
+  // as a path segment; never let the sanitized value be a relative path token.
+  if (cleaned === '' || /^\.+$/.test(cleaned)) return 'video';
+  return cleaned;
 }
 
 export function extensionFromType(type: string): string {
@@ -125,7 +128,10 @@ async function downloadSegmented(
 ): Promise<void> {
   const { net, onProgress, signal } = options;
   const segments = planSegments(total, connections);
-  const partPaths = segments.map((segment) => `${outPath}.p${segment.index}`);
+  // Encode the segment plan (total size + connection count) into the part name so
+  // a resume with a different plan can never append onto a stale, wrong-range part.
+  const planTag = `t${total}.c${connections}`;
+  const partPaths = segments.map((segment) => `${outPath}.${planTag}.p${segment.index}`);
 
   const existing = await Promise.all(partPaths.map(sizeOrZero));
   const haves = segments.map((segment, i) => Math.min(existing[i], segment.end - segment.start + 1));
@@ -142,7 +148,33 @@ async function downloadSegmented(
     ),
   );
 
-  await concatFiles(partPaths, outPath);
+  // Verify every part is exactly its planned length before assembling. A short
+  // part means a segment silently under-downloaded; fail loudly and keep parts.
+  const sizes = await Promise.all(partPaths.map(sizeOrZero));
+  for (let i = 0; i < segments.length; i++) {
+    const expected = segments[i].end - segments[i].start + 1;
+    if (sizes[i] !== expected) {
+      throw new Error(
+        `Segment ${i} size mismatch: expected ${expected} bytes, found ${sizes[i]}. ` +
+          'Download incomplete; rerun to resume.',
+      );
+    }
+  }
+
+  const parts = segments.map((segment, i) => ({
+    path: partPaths[i],
+    length: segment.end - segment.start + 1,
+  }));
+  // Assemble into a temp file, then atomically rename, so an interrupted concat
+  // never leaves a truncated file under the real name.
+  const tmpPath = `${outPath}.assembling`;
+  await concatFiles(parts, tmpPath);
+  const assembled = await sizeOrZero(tmpPath);
+  if (assembled !== total) {
+    await rm(tmpPath, { force: true });
+    throw new Error(`Assembled size ${assembled} does not match expected ${total}.`);
+  }
+  await rename(tmpPath, outPath);
   await Promise.all(partPaths.map((path) => rm(path, { force: true })));
 }
 
@@ -178,17 +210,26 @@ async function downloadSegment(
   await pipeline(nodeStream, fileStream);
 }
 
-async function concatFiles(parts: string[], outPath: string): Promise<void> {
+async function concatFiles(
+  parts: Array<{ path: string; length: number }>,
+  outPath: string,
+): Promise<void> {
   const out = createWriteStream(outPath, { flags: 'w' });
+  // 'error' handler attached once, not per-iteration.
+  const outErr = new Promise<never>((_, reject) => out.on('error', reject));
   try {
     for (const part of parts) {
-      await new Promise<void>((resolve, reject) => {
-        const readStream = createReadStream(part);
-        readStream.on('error', reject);
-        out.on('error', reject);
-        readStream.on('end', () => resolve());
-        readStream.pipe(out, { end: false });
-      });
+      await Promise.race([
+        outErr,
+        new Promise<void>((resolve, reject) => {
+          // Bound the read to the segment's expected length so a stale, oversized
+          // part can never overflow the reassembled file.
+          const readStream = createReadStream(part.path, { start: 0, end: part.length - 1 });
+          readStream.on('error', reject);
+          readStream.on('end', () => resolve());
+          readStream.pipe(out, { end: false });
+        }),
+      ]);
     }
   } finally {
     out.end();
@@ -213,6 +254,14 @@ async function downloadSingle(
 
   const res = await httpRequest(source.src, { net, headers, signal });
   if (res.status === 416) {
+    // 416 means our start offset is past the server's size — usually the .part is
+    // already complete. Verify its size matches the real total before promoting;
+    // a stale/oversized .part must be discarded, not renamed to the final file.
+    const realTotal = await probeTotalSize(source, net, signal);
+    if (realTotal != null && startByte !== realTotal) {
+      await rm(partPath, { force: true });
+      throw new Error('Local partial file does not match the server; restarting. Rerun to download.');
+    }
     await rename(partPath, outPath);
     return;
   }
@@ -237,5 +286,10 @@ async function downloadSingle(
   });
 
   await pipeline(nodeStream, fileStream);
+  if (total != null && received !== total) {
+    throw new Error(
+      `Download incomplete: received ${received} of ${total} bytes. Rerun to resume.`,
+    );
+  }
   await rename(partPath, outPath);
 }

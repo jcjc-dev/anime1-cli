@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planSegments } from '../src/download.js';
+import { planSegments, sanitizeFilename } from '../src/download.js';
 
 describe('planSegments', () => {
   it('splits a total into contiguous, non-overlapping segments covering everything', () => {
@@ -32,5 +32,29 @@ describe('planSegments', () => {
     const segments = planSegments(3, 8);
     expect(segments.length).toBeLessThanOrEqual(3);
     expect(segments[segments.length - 1].end).toBe(2);
+  });
+});
+
+describe('sanitizeFilename', () => {
+  it('replaces path separators and control chars', () => {
+    expect(sanitizeFilename('a/b\\c')).toBe('a_b_c');
+    expect(sanitizeFilename('na\x00me')).toBe('na_me');
+  });
+
+  it('never returns a directory-traversal token', () => {
+    expect(sanitizeFilename('..')).toBe('video');
+    expect(sanitizeFilename('.')).toBe('video');
+    expect(sanitizeFilename('  ..  ')).toBe('video');
+    expect(sanitizeFilename('...')).toBe('video');
+  });
+
+  it('falls back to "video" for empty input', () => {
+    expect(sanitizeFilename('')).toBe('video');
+    expect(sanitizeFilename('   ')).toBe('video');
+  });
+
+  it('preserves a normal title (incl. CJK) and caps length', () => {
+    expect(sanitizeFilename('Frieren 葬送のフリーレン [01]')).toBe('Frieren 葬送のフリーレン [01]');
+    expect(sanitizeFilename('x'.repeat(500)).length).toBe(180);
   });
 });
