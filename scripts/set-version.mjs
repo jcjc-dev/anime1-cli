@@ -38,6 +38,21 @@ patch('packages/cli/package.json', (p) => {
   p.dependencies['anime1-core'] = coreDep;
 });
 
+// Keep the CLI's VERSION constant in lockstep with the package version so
+// `anime1 --version` is always correct (version.test.ts enforces this).
+const constantsPath = 'packages/cli/src/constants.ts';
+const constantsSrc = readFileSync(constantsPath, 'utf8');
+const nextConstants = constantsSrc.replace(
+  /export const VERSION = '[^']*';/,
+  `export const VERSION = '${version}';`,
+);
+if (nextConstants === constantsSrc) {
+  console.error(`Could not find the VERSION constant to update in ${constantsPath}`);
+  process.exit(1);
+}
+writeFileSync(constantsPath, nextConstants);
+console.log(`updated ${constantsPath}`);
+
 console.log('syncing package-lock.json...');
 execFileSync('npm', ['install', '--package-lock-only', '--no-audit', '--no-fund'], {
   stdio: 'inherit',
