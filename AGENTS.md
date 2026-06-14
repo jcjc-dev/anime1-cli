@@ -138,8 +138,10 @@ over silencing type/lint errors.
   strips them).
 - Keep `.gitignore` excluding `node_modules/`, `dist/`, `coverage/`,
   `downloads/`, and partial-download files (`*.part` and segment files).
-- `main` is protected: no force pushes, no deletions, linear history. Merges are
-  squash-only. Do not rewrite published history.
+- `main` is protected: pull requests are required (no direct pushes), no force
+  pushes, no deletions, linear history, and merges are squash-only. A PR can be
+  self-merged once the `PR gate passed` check is green; no approval is required.
+  Do not rewrite published history.
 
 ## Releasing
 
@@ -152,11 +154,13 @@ To cut a release:
 1. `npm run version:set 0.1.2` (or a prerelease like `0.2.0-beta.1`). This bumps
    the root, `anime1-core`, and `anime1-cli` versions, updates the cli's
    `anime1-core` dependency, and syncs the lockfile.
-2. Commit and push to `main`.
-3. The Release workflow detects the changed version and, only if no matching tag
-   exists, runs `validate` (lint + build + test), then tags, publishes both
-   packages to npm with provenance, and creates a GitHub Release. Nothing is
-   published unless validation passes.
+2. Commit on a branch, push, open a PR, and squash-merge it once the PR gate is
+   green (`main` is protected, so this cannot be pushed directly).
+3. The squash-merge pushes the version bump to `main`, which the Release
+   workflow detects. If no matching tag exists it runs `validate`
+   (lint + build + test), then tags, publishes both packages to npm with
+   provenance, and creates a GitHub Release. Nothing is published unless
+   validation passes.
 
 Notes:
 

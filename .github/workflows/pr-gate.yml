@@ -37,3 +37,21 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm test
+
+  gate:
+    # Single, stable status check to require in branch protection. It passes
+    # only if every matrix leg of `validate` passed, so the required check does
+    # not need to change when the matrix changes.
+    name: PR gate passed
+    needs: validate
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require all validation jobs to succeed
+        run: |
+          if [ "${{ needs.validate.result }}" != "success" ]; then
+            echo "One or more validation jobs failed."
+            exit 1
+          fi
+          echo "All validation jobs passed."

@@ -114,14 +114,16 @@ npm test        # run the tests
 
 ## Releasing
 
-The version in `package.json` drives releases. Bump it, push, and the rest is automatic.
+The version in `package.json` drives releases. Bump it, open a PR, and once it merges the rest is automatic.
 
 ```sh
-npm run version:set 0.1.2   # updates both packages, the lockfile, and the dep
-git add -A && git commit -m "Release 0.1.2" && git push origin main
+npm run version:set 0.1.2        # updates both packages, the lockfile, and the dep
+git switch -c release-0.1.2
+git commit -am "Release 0.1.2"
+git push -u origin release-0.1.2  # then open a PR and squash-merge it once the gate is green
 ```
 
-When a push to `main` changes the root `package.json` version, the Release workflow runs lint, build, and tests, and only if they all pass does it tag the commit, publish both packages to npm with provenance, and cut a GitHub Release with generated notes. Nothing reaches npm unless the checks are green.
+`main` is protected, so changes go through a pull request. When the version-bump PR is squash-merged, the push to `main` triggers the Release workflow: it runs lint, build, and tests, and only if they all pass does it tag the commit, publish both packages to npm with provenance, and cut a GitHub Release with generated notes. Nothing reaches npm unless the checks are green.
 
 A prerelease version like `0.2.0-beta.1` publishes to the `beta` dist-tag instead of `latest`, so it stays out of the way of normal installs. Try it with `npm install -g anime1-cli@beta`.
 
