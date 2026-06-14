@@ -16,7 +16,8 @@
     "lint": "npm run build -w anime1-core && npm run lint -w anime1-core && npm run lint -w anime1-cli",
     "test": "npm run test --workspaces --if-present",
     "dev": "npm run build -w anime1-core && npm run dev -w anime1-cli",
-    "start": "npm run start -w anime1-cli"
+    "start": "npm run start -w anime1-cli",
+    "version:set": "node scripts/set-version.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

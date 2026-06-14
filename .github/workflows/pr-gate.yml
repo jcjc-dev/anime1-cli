@@ -1,0 +1,39 @@
+name: PR gate
+
+# Validation that runs on every pull request and on pushes to main:
+# lint, build, and unit tests across a small OS and Node matrix. The release
+# pipeline runs the same checks again before publishing.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pr-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ["20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund --prefer-offline
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test

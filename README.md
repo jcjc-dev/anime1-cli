@@ -1,6 +1,7 @@
 # anime1-cli
 
-[![Publish](https://github.com/jcjc-dev/anime1-cli/actions/workflows/publish.yml/badge.svg)](https://github.com/jcjc-dev/anime1-cli/actions/workflows/publish.yml)
+[![PR gate](https://github.com/jcjc-dev/anime1-cli/actions/workflows/pr-gate.yml/badge.svg)](https://github.com/jcjc-dev/anime1-cli/actions/workflows/pr-gate.yml)
+[![Release](https://github.com/jcjc-dev/anime1-cli/actions/workflows/publish.yml/badge.svg)](https://github.com/jcjc-dev/anime1-cli/actions/workflows/publish.yml)
 [![npm](https://img.shields.io/npm/v/anime1-cli?label=anime1-cli)](https://www.npmjs.com/package/anime1-cli)
 [![npm](https://img.shields.io/npm/v/anime1-core?label=anime1-core)](https://www.npmjs.com/package/anime1-core)
 [![license](https://img.shields.io/npm/l/anime1-cli)](./LICENSE)
@@ -110,6 +111,19 @@ npm run build   # compile both packages
 npm run lint    # type check and eslint
 npm test        # run the tests
 ```
+
+## Releasing
+
+The version in `package.json` drives releases. Bump it, push, and the rest is automatic.
+
+```sh
+npm run version:set 0.1.2   # updates both packages, the lockfile, and the dep
+git add -A && git commit -m "Release 0.1.2" && git push origin main
+```
+
+When a push to `main` changes the root `package.json` version, the Release workflow runs lint, build, and tests, and only if they all pass does it tag the commit, publish both packages to npm with provenance, and cut a GitHub Release with generated notes. Nothing reaches npm unless the checks are green.
+
+A prerelease version like `0.2.0-beta.1` publishes to the `beta` dist-tag instead of `latest`, so it stays out of the way of normal installs. Try it with `npm install -g anime1-cli@beta`.
 
 ## Legal
 

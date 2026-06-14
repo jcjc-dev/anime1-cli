@@ -1,43 +1,196 @@
-name: Publish
+name: Release
 
-# Publishes both packages to npm when you publish a GitHub Release.
-# You can also run it by hand from the Actions tab (workflow_dispatch).
+# Version-bump-triggered release pipeline, modelled on the copillm project:
+# detect a version change -> validate -> tag -> publish to npm -> GitHub Release.
 #
-# Authentication uses npm Trusted Publishing (OIDC), so there is no token to
-# store. Before the first CI publish, configure a trusted publisher for each
-# package on npmjs.com (see the repo README / AGENTS notes for the exact values).
+# Trigger: a push to main that modifies the root package.json. If its "version"
+# changed and no v<version> tag exists yet, the pipeline runs end to end.
+# Otherwise the detect job no-ops and the downstream jobs are skipped.
+#
+# Nothing is published unless validation (lint + build + tests) passes first.
+#
+# Manual workflow_dispatch is also available to retry the current version
+# (idempotent: it skips if the tag already exists).
+#
+# Channels: a clean version (e.g. 0.2.0) publishes to npm's `latest` dist-tag
+# and a normal GitHub Release. A prerelease version (a hyphen in the semver,
+# e.g. 0.2.0-beta.1) publishes to the `beta` dist-tag and is marked as a GitHub
+# pre-release, so people running `npm i -g anime1-cli` are untouched.
+#
+# The whole release happens in one workflow run, which sidesteps the rule that
+# a tag pushed with GITHUB_TOKEN cannot trigger another workflow.
+#
+# Note: the npm trusted publisher (OIDC) is bound to this filename, publish.yml.
+# Renaming this file means updating the trusted publisher config for both
+# packages on npmjs.com.
 
 on:
-  release:
-    types: [published]
-  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+  workflow_dispatch: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
-  contents: read
-  id-token: write # required for npm trusted publishing (OIDC) and provenance
+  contents: write # tags + GitHub Releases
+  id-token: write # npm OIDC trusted publishing + provenance
 
 jobs:
-  publish:
+  detect:
+    name: Detect version bump
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.pkg.outputs.version }}
+      tag: ${{ steps.pkg.outputs.tag }}
+      should_release: ${{ steps.tag_check.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version from package.json
+        id: pkg
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "package.json version: $version"
+
+      - name: Check whether the tag already exists
+        id: tag_check
+        env:
+          TAG: ${{ steps.pkg.outputs.tag }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "Tag $TAG already exists; nothing to release."
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "Tag $TAG does not exist; will release."
+          fi
+
+  validate:
+    name: Validate (lint, build, test)
+    needs: detect
+    if: needs.detect.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          registry-url: https://registry.npmjs.org
+          node-version: "22"
+          cache: npm
 
-      - name: Use an npm that supports trusted publishing
-        run: npm install -g npm@latest
-
-      - run: npm ci
-
+      - run: npm ci --no-audit --no-fund --prefer-offline
+      - run: npm run lint
       - run: npm run build
-
       - run: npm test
 
-      - name: Publish anime1-core
-        run: npm publish -w anime1-core --provenance --access public
+  tag:
+    name: Create and push tag
+    needs: [detect, validate]
+    if: needs.detect.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Publish anime1-cli
-        run: npm publish -w anime1-cli --provenance --access public
+      - name: Create and push tag
+        env:
+          TAG: ${{ needs.detect.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+
+  publish:
+    name: Publish to npm
+    needs: [detect, validate, tag]
+    if: needs.detect.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.detect.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+
+      # npm >= 11.5.1 is required for OIDC trusted publishing.
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - run: npm ci --no-audit --no-fund --prefer-offline
+      - run: npm run build
+
+      - name: Verify every package.json matches the tag
+        env:
+          TAG: ${{ needs.detect.outputs.tag }}
+        run: |
+          stripped="${TAG#v}"
+          for dir in . packages/core packages/cli; do
+            v=$(node -p "require('./$dir/package.json').version")
+            if [ "$v" != "$stripped" ]; then
+              echo "Version mismatch in $dir/package.json ($v) vs tag ($stripped)" >&2
+              exit 1
+            fi
+          done
+          echo "All package versions match $stripped"
+
+      - name: Publish (core first, then cli)
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          # Prereleases (a hyphen in the semver, e.g. 0.2.0-beta.1) go to the
+          # `beta` dist-tag so they never overwrite `latest`. Clean versions
+          # publish to `latest` (npm's default when no --tag is given).
+          if [[ "$VERSION" == *-* ]]; then
+            tag_flag="--tag beta"
+            echo "Publishing prerelease $VERSION to the 'beta' dist-tag."
+          else
+            tag_flag=""
+            echo "Publishing release $VERSION to the 'latest' dist-tag."
+          fi
+          npm publish -w anime1-core --provenance --access public $tag_flag
+          npm publish -w anime1-cli --provenance --access public $tag_flag
+
+  release:
+    name: Create GitHub Release
+    needs: [detect, validate, tag, publish]
+    if: needs.detect.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.detect.outputs.tag }}
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          prerelease_flag=""
+          if [[ "$VERSION" == *-* ]]; then
+            prerelease_flag="--prerelease"
+          fi
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG" \
+            --generate-notes \
+            $prerelease_flag
