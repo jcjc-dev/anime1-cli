@@ -1,4 +1,4 @@
-// Public API for @anime1/core — the UI-agnostic engine.
+// Public API for anime1-core, the UI-agnostic engine.
 // Frontends (CLI, web, desktop) compose these primitives.
 
 export type { Anime, Episode, ResolvedSource, NetOptions } from './types.js';

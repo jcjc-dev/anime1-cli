@@ -2,13 +2,28 @@
   "name": "anime1-cli",
   "version": "0.1.0",
   "description": "Interactive CLI to browse anime1.me by year and season and download episodes. Self-contained, no system dependencies.",
+  "keywords": [
+    "anime1",
+    "anime",
+    "downloader",
+    "cli"
+  ],
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jcjc-dev/anime1-cli.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/jcjc-dev/anime1-cli#readme",
+  "bugs": "https://github.com/jcjc-dev/anime1-cli/issues",
   "bin": {
     "anime1": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20"
@@ -22,7 +37,7 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@anime1/core": "*",
+    "anime1-core": "^0.1.0",
     "@inquirer/prompts": "^7.2.0",
     "commander": "^12.1.0"
   }

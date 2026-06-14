@@ -1,9 +1,21 @@
 {
-  "name": "@anime1/core",
+  "name": "anime1-core",
   "version": "0.1.0",
-  "description": "UI-agnostic engine for browsing and downloading from anime1.me.",
+  "description": "Engine for browsing and downloading from anime1.me. No UI, no runtime dependencies.",
+  "keywords": [
+    "anime1",
+    "anime",
+    "downloader"
+  ],
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jcjc-dev/anime1-cli.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/jcjc-dev/anime1-cli/tree/main/packages/core#readme",
+  "bugs": "https://github.com/jcjc-dev/anime1-cli/issues",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -13,7 +25,9 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20"
@@ -21,6 +35,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit && eslint src",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
   }
 }
