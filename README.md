@@ -1,203 +1,113 @@
 # anime1-cli
 
-An interactive command-line tool to browse [anime1.me](https://anime1.me) by
-**year and season** and download episodes — written in TypeScript, distributed
-on npm, and **self-contained**.
+A command line tool for browsing [anime1.me](https://anime1.me) by year and season and downloading episodes. Written in TypeScript, runs on Node, and needs nothing else installed.
 
-> **For research and experimentation only.** This project is an independent,
-> unofficial tool and is not affiliated with anime1.me. See the
-> [Disclaimer](#disclaimer) before using it.
+I made this because the existing options were either browser userscripts or Python scripts that pulled in yt-dlp and ffmpeg. This one only needs Node, and it lets you browse the catalogue by season instead of hunting down a URL to paste in.
 
-- **No system dependencies.** Videos are served as direct MP4 files, so
-  downloads are plain authenticated HTTP requests. There is **no need** for
-  `ffmpeg`, `yt-dlp`, Python, or any other external tool — just Node.js.
-- **Nothing is cached to disk.** The catalog is fetched fresh on every run and
-  kept in memory only; no data files are written to your home directory.
+## Features
+
+- Browse the whole catalogue by year and season, newest first
+- Search by title, then grab a full series or just the episodes you want
+- Fast downloads that open several connections per file (the CDN throttles each connection, so this makes a real difference)
+- Resumes interrupted downloads instead of starting from scratch
+- A live progress bar with speed and ETA
+- No ffmpeg, no yt-dlp, no Python, just Node
+- Nothing is written to your home folder. The catalogue is fetched fresh each run and kept in memory
 
 ## Requirements
 
-- Node.js 20 or later
+Node.js 20 or newer.
 
 ## Install
 
-```sh
-npm install -g anime1-cli
-anime1 --help
-```
-
-Or run without installing:
+It is not on npm yet, so build it from source:
 
 ```sh
-npx anime1-cli
+git clone https://github.com/jcjc-dev/anime1-cli.git
+cd anime1-cli
+npm install
+npm run build
+cd packages/cli && npm link
 ```
+
+That puts an `anime1` command on your PATH. If you would rather not link it globally, you can run it straight from the repo with `npm run dev`.
 
 ## Usage
 
-### Interactive (default)
-
-Just run the command and follow the prompts:
+Run it with no arguments and it walks you through everything:
 
 ```sh
 anime1
 ```
 
-You will be guided through:
+You pick a year, then a season, then the series (type to filter the list), then which episodes, then where to save them. By default files land in `./downloads/<series>`.
 
-1. **Year** — newest first.
-2. **Season** — 春 Spring / 夏 Summer / 秋 Autumn / 冬 Winter (only the seasons
-   present that year, latest first).
-3. **Series** — a searchable list; start typing to filter by title.
-4. **Episodes** — all of them, or pick specific ones.
-5. **Output directory** — defaults to `./downloads`.
-
-Each episode is saved as `<output>/<series>/<episode>.mp4` with a live progress
-bar, and partial downloads resume automatically if interrupted.
-
-### Non-interactive flags
-
-The same flow can be driven entirely from flags, which is handy for scripting
-and automation — no prompts are shown:
+You can also skip the prompts and drive it with flags, which is handy in scripts:
 
 ```sh
-# Download every episode of one series into ./anime
-anime1 --year 2025 --season summer --search "frieren" --all --out ./anime
+# grab every episode of one series
+anime1 --year 2025 --season summer --search "frieren" --all
 
-# Jump straight to a known category id and grab everything
+# jump straight to a category id
 anime1 --cat 6 --all --out ./anime
 
-# Just print resolved video URLs + cookies (no download)
+# print the resolved video links and cookies without downloading
 anime1 --cat 6 --extract
 
-# Browse the catalog as text
+# just print the catalogue
 anime1 --list --year 2026 --season spring
 ```
 
-To run fully non-interactively you must give the tool enough to pick a series
-without asking, either:
-
-- `--cat <id>` (most direct — no year/season needed), or
-- `--year` + `--season`, plus `--search` when that season has more than one
-  title (the search must narrow it to a single series).
-
-Add `--all` to take every episode, or `--extract` to only print URLs. When
-output is piped (not a TTY), the tool automatically selects all episodes. Use
-`--out`, `--concurrency`, and `--min-interval` to control where and how fast it
-downloads.
-
-| Flag | Description |
+| Flag | What it does |
 | --- | --- |
-| `--year <year>` | Filter by year, e.g. `2025`. |
-| `--season <season>` | `spring`/`summer`/`autumn`/`winter` or `春`/`夏`/`秋`/`冬`. |
-| `--search <text>` | Filter series by title text. |
-| `--cat <id>` | Jump straight to a category id, skipping browsing. |
-| `--all` | Download all episodes without prompting. |
-| `--out <dir>` | Output directory (default `./downloads`). |
-| `--list` | Print the catalog (respects the filters above) and exit. |
-| `--extract` | Print resolved video URLs and cookies instead of downloading. |
-| `--concurrency <n>` | Number of episodes downloaded in parallel (default `1`, capped at `4`). |
-| `--connections <n>` | Parallel connections per episode for faster downloads (default `6`, capped at `8`). |
-| `--min-interval <ms>` | Minimum delay between requests for polite rate limiting (default `250`). |
-| `--user-agent <ua>` | Custom User-Agent (helps bypass Cloudflare). |
-| `--cf-clearance <cookie>` | `cf_clearance` cookie value (helps bypass Cloudflare). |
+| `--year <year>` | Filter by year, like `2025` |
+| `--season <season>` | `spring`, `summer`, `autumn`, `winter` (or `春`, `夏`, `秋`, `冬`) |
+| `--search <text>` | Filter the series list by title |
+| `--cat <id>` | Jump straight to a category id |
+| `--all` | Take every episode, no prompts |
+| `--out <dir>` | Where to save (default `./downloads`) |
+| `--connections <n>` | Connections per file (default 6, max 8) |
+| `--concurrency <n>` | Episodes downloaded at once (default 1, max 4) |
+| `--list` | Print the catalogue and exit |
+| `--extract` | Print video URLs and cookies, no download |
+| `--min-interval <ms>` | Smallest gap between requests (default 250) |
+| `--user-agent <ua>` | Custom User-Agent, if Cloudflare gets in the way |
+| `--cf-clearance <cookie>` | `cf_clearance` cookie, if Cloudflare gets in the way |
+
+If anime1.me ever answers with a Cloudflare challenge (an HTTP 403), copy a matching User-Agent and `cf_clearance` cookie out of your browser and pass them with `--user-agent` and `--cf-clearance`.
+
+Streaming-only episodes (`.m3u8`) are uncommon on the site and are skipped for now rather than downloaded.
 
 ## How it works
 
-1. Fetch `https://anime1.me/animelist.json` — the complete catalog (≈1,800
-   titles) in a single request, with year and season for every title.
-2. For the chosen series, load its category page (`?cat=<id>`), following
-   pagination for long-running shows, and read each episode's `data-apireq`.
-3. POST that token to `https://v.anime1.me/api` to get the direct MP4 URL and
-   the short-lived cookies the CDN requires.
-4. Download the MP4 to disk. The CDN throttles each connection to roughly
-   1 MB/s, so by default the file is fetched in several parallel range segments
-   (`--connections`, default 6) and reassembled — several times faster than a
-   single stream — while a live progress bar shows percentage, size, **speed,
-   and ETA**. Partial downloads resume where they left off.
+anime1.me publishes its entire catalogue as a single JSON file, with the year and season for every title. The tool reads that, lets you pick a series, then loads the series page to find each episode. For every episode it asks the site's API for the real video URL and the short lived cookies the CDN expects, then downloads the file over plain HTTP.
 
-## Site protection & being a good citizen
+A single connection to the CDN is capped at roughly 1 MB/s, so by default each file is fetched in several parallel ranges and stitched back together, which is usually several times faster. Tune it with `--connections` if you want.
 
-anime1.me is protected on two layers, and this tool is built to stay well
-within them rather than work around them:
+## Project layout
 
-- **Cloudflare** fronts the website (catalog and category pages). If you hit a
-  challenge (HTTP 403), pass `--user-agent` and `--cf-clearance` (see below).
-- **Signed-cookie protection** guards the video edge. The API returns short-lived
-  cookies (`e`/`h`/`p`, where `p` is a path-scoped JWT valid ~8 hours). They only
-  authorize the one file they were issued for; without them the CDN returns 403.
+This is an npm workspaces monorepo with two packages:
 
-To avoid hammering the site, the client:
+- `packages/core` (`@anime1/core`) is the engine: catalogue, filtering, episode resolution and downloading. It has no UI code and no runtime dependencies, so other front ends can reuse it.
+- `packages/cli` (`anime1-cli`) is the terminal app that gives you the `anime1` command.
 
-- spaces all outbound requests at least `--min-interval` milliseconds apart
-  (default 250 ms), even when downloads run in parallel, so it never bursts;
-- caps `--concurrency` at 4 regardless of what you ask for;
-- retries transient failures with exponential backoff and honors the server's
-  `Retry-After` header on `429`/`503` responses;
-- defaults to sequential downloads with resume support, so an interrupted run
-  re-fetches only the missing bytes instead of starting over.
-
-### Bypassing a Cloudflare challenge
-
-If a request is blocked (HTTP 403), pass a matching browser User-Agent and
-`cf_clearance` cookie copied from your browser:
+Common tasks, all run from the repo root:
 
 ```sh
-anime1 --user-agent "Mozilla/5.0 ..." --cf-clearance "<cookie value>"
+npm run dev     # run the CLI from source
+npm run build   # compile both packages
+npm run lint    # type check and eslint
+npm test        # run the tests
 ```
 
-## Development
+## Legal
 
-This repository is an npm-workspaces monorepo:
+This is a personal tool. It does not host, store, or distribute any media. All it does is automate the same requests your browser already makes when you open anime1.me.
 
-- **`@anime1/core`** (`packages/core`) — the reusable, UI-agnostic engine
-  (catalog, filtering, episode resolution, downloading). No CLI/UI dependencies,
-  so it can back other frontends (web, desktop) too.
-- **`anime1-cli`** (`packages/cli`) — the terminal frontend that provides the
-  `anime1` command.
+How you use it is on you. Follow the laws where you live, the terms of any site you point it at, and the rights of the people who made the content. Whether you are allowed to download a particular video is your call to make, not this project's.
 
-Run the scripts from the repo root:
-
-```sh
-npm install
-npm run dev      # build core, then run the CLI from source with tsx
-npm run build    # compile both packages
-npm run lint     # type-check + eslint across packages
-npm test         # run unit tests (vitest) in all packages
-```
-
-Using the engine directly:
-
-```ts
-import { fetchCatalog, fetchEpisodes, resolveSource, downloadSource } from '@anime1/core';
-```
-
-## Notes
-
-- HLS (`.m3u8`) sources are rare on anime1.me and are not downloaded yet; such
-  episodes are reported and skipped.
-- Please use this tool responsibly and respect the source site.
-
-## Disclaimer
-
-This project is provided **for research, educational, and experimentation
-purposes only**.
-
-- It is an **independent, unofficial** tool. It is **not affiliated with,
-  endorsed by, or sponsored by** anime1.me, its operators, or any content
-  owners or rights holders.
-- It does **not host, store, distribute, or circumvent access controls on** any
-  content. It only automates the same publicly reachable HTTP requests a normal
-  web browser makes, and the upstream site may change or break it at any time
-  without notice.
-- **You are solely responsible** for how you use this tool, including ensuring
-  your use complies with all applicable laws, the source site's Terms of
-  Service, and the rights of copyright holders. Downloading or redistributing
-  copyrighted material without permission may be illegal in your jurisdiction.
-- The software is provided **"as is", without warranty of any kind**, express or
-  implied. To the maximum extent permitted by law, the authors and contributors
-  **accept no liability** for any claim, damages, or other liability arising
-  from its use. **Use at your own risk.**
+The software is provided as is, with no warranty of any kind. The author is not responsible for what anyone does with it and accepts no liability for copyright claims, DMCA notices, fines, or any other damages that come out of using it. A rights complaint belongs with the person who ran the tool and saved the file, not with the code or its author. If that does not work for you, do not use it.
 
 ## License
 
-Released under the [MIT License](./LICENSE).
-
+MIT. See [LICENSE](./LICENSE).
