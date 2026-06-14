@@ -1,6 +1,6 @@
 {
   "name": "anime1-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Interactive CLI to browse anime1.me by year and season and download episodes. Self-contained, no system dependencies.",
   "keywords": [
     "anime1",
@@ -37,7 +37,7 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "anime1-core": "^0.1.0",
+    "anime1-core": "^0.1.1",
     "@inquirer/prompts": "^7.2.0",
     "commander": "^12.1.0"
   }
