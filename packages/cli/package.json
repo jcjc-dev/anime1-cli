@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "anime1-core": "^0.1.1",
-    "@inquirer/prompts": "^7.2.0",
+    "@inquirer/prompts": "^8.5.2",
     "commander": "^15.0.0"
   }
 }
