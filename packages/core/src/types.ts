@@ -18,10 +18,23 @@ export interface Anime {
 
 export interface Episode {
   title: string;
-  /** The URL-encoded `data-apireq` attribute value posted to the API. */
-  apiReq: string;
   /** Parsed episode number from a trailing "[NN]" marker, if present. */
   number: number | null;
+  /**
+   * anime1.me locator: the URL-encoded `data-apireq` attribute posted to the
+   * API. Present for catalog/`?cat=` episodes.
+   */
+  apiReq?: string;
+  /**
+   * Page-based locator (e.g. anime1.pw): the episode page URL whose markup
+   * exposes a direct video source.
+   */
+  pageUrl?: string;
+  /**
+   * Pre-resolved source, when collecting a single episode already fetched its
+   * page. Lets the downloader skip a redundant round trip.
+   */
+  source?: ResolvedSource;
 }
 
 export interface ResolvedSource {

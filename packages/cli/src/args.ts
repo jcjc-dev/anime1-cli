@@ -39,3 +39,30 @@ export function resolveSeriesDir(base: string, sub: string): string {
   }
   return full;
 }
+
+/** Splits positional URL arguments that may be comma- or whitespace-separated. */
+export function splitUrlArgs(values: string[]): string[] {
+  return values
+    .flatMap((value) => value.split(/[,\s]+/))
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+}
+
+/**
+ * Derives a series folder name for URL-driven downloads: the first episode
+ * title with a trailing "[NN]" marker removed, else the last URL path segment.
+ * Returns "" when nothing usable can be derived (caller saves into the base).
+ */
+export function deriveSeriesName(titles: string[], fallbackUrl: string): string {
+  for (const title of titles) {
+    const stripped = title.replace(/\s*\[[^\]]*\]\s*$/, '').trim();
+    if (stripped) return stripped;
+  }
+  try {
+    const segment = new URL(fallbackUrl).pathname.split('/').filter(Boolean).pop();
+    if (segment) return decodeURIComponent(segment);
+  } catch {
+    // Unparseable URL: fall through to the empty default.
+  }
+  return '';
+}

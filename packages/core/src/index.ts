@@ -3,6 +3,8 @@
 
 export type { Anime, Episode, ResolvedSource, NetOptions } from './types.js';
 export type { DownloadOptions, DownloadProgress, Segment } from './download.js';
+export type { SourceKind, UrlKind, UrlClassification } from './sources.js';
+export type { HlsDownloadOptions, HlsVariant, MediaPlaylist, HlsSegment, HlsKey } from './hls.js';
 
 export { fetchCatalog } from './catalog.js';
 export {
@@ -13,8 +15,41 @@ export {
   searchByTitle,
   normalizeSeason,
 } from './filter.js';
-export { fetchEpisodes, parseEpisodes, parsePagination } from './resolver.js';
+export {
+  fetchEpisodes,
+  fetchEpisodesFromUrl,
+  parseEpisodes,
+  parsePagination,
+  parseEpisodeNumber,
+} from './resolver.js';
 export { resolveSource } from './api.js';
+export { resolveEpisode, collectEpisodesFromUrl } from './resolve.js';
+export {
+  detectSource,
+  classifyUrl,
+  isEpisodeUrl,
+  isCategoryUrl,
+  ANIME1_ME,
+  ANIME1_PW,
+} from './sources.js';
+export {
+  resolvePwEpisode,
+  fetchPwEpisode,
+  fetchPwEpisodes,
+  parsePwEpisodePage,
+  parsePwSeasonPage,
+  selectMp4Source,
+} from './pw.js';
+export {
+  downloadHls,
+  parseMasterPlaylist,
+  parseMediaPlaylist,
+  isMasterPlaylist,
+  selectVariant,
+  parseAttributes,
+  parseHex,
+  ivForSequence,
+} from './hls.js';
 export {
   downloadSource,
   planSegments,
