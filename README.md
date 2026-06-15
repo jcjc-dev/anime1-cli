@@ -14,7 +14,9 @@ I made this because the existing options were either browser userscripts or Pyth
 
 - Browse the whole catalogue by year and season, newest first
 - Search by title, then grab a full series or just the episodes you want
+- Or just paste an episode or category URL, from `anime1.me` or `anime1.pw`
 - Fast downloads that open several connections per file (the CDN throttles each connection, so this makes a real difference)
+- Handles HLS (`.m3u8`) streams too, decrypting and stitching the segments into a single file with no ffmpeg
 - Resumes interrupted downloads instead of starting from scratch
 - A live progress bar with speed and ETA
 - No ffmpeg, no yt-dlp, no Python, just Node
@@ -54,6 +56,29 @@ anime1
 
 You pick a year, then a season, then the series (type to filter the list), then which episodes, then where to save them. By default files land in `./downloads/<series>`.
 
+You can also just hand it one or more URLs, an episode page or a whole category/season, and it figures out the rest:
+
+```sh
+# a single episode
+anime1 https://anime1.me/15651
+anime1 https://anime1.pw/349
+
+# a whole category/season (every episode), into a folder
+anime1 "https://anime1.pw/?cat=60" --all --out ./anime
+
+# several at once (space- or comma-separated)
+anime1 https://anime1.me/15651 https://anime1.pw/349
+```
+
+Supported sources:
+
+| Source | Episode URL | Category / season URL | Video |
+| --- | --- | --- | --- |
+| `anime1.me` | `https://anime1.me/15651` | `https://anime1.me/category/...` (or `--cat <id>` / catalogue browse) | MP4 via API |
+| `anime1.pw` | `https://anime1.pw/349` | `https://anime1.pw/?cat=60` or `https://anime1.pw/<slug>` | direct MP4 |
+
+Only `anime1.me` has the JSON catalogue, so year/season browsing and `--search` apply to it; for `anime1.pw` paste a URL.
+
 You can also skip the prompts and drive it with flags, which is handy in scripts:
 
 ```sh
@@ -88,11 +113,13 @@ anime1 --list --year 2026 --season spring
 
 If anime1.me ever answers with a Cloudflare challenge (an HTTP 403), copy a matching User-Agent and `cf_clearance` cookie out of your browser and pass them with `--user-agent` and `--cf-clearance`.
 
-Streaming-only episodes (`.m3u8`) are uncommon on the site and are skipped for now rather than downloaded.
+When an episode is served as an HLS (`.m3u8`) stream, it is downloaded too: the segments are fetched, decrypted (AES-128) if needed, and concatenated into a single file with no ffmpeg. MPEG-TS streams are saved as `.ts` and fragmented-MP4 streams as `.mp4` (the segments are passed through, not re-encoded).
 
 ## How it works
 
 anime1.me publishes its entire catalogue as a single JSON file, with the year and season for every title. The tool reads that, lets you pick a series, then loads the series page to find each episode. For every episode it asks the site's API for the real video URL and the short lived cookies the CDN expects, then downloads the file over plain HTTP.
+
+anime1.pw works a little differently: there is no catalogue, so you paste a URL, and each episode page already carries a direct (signed) MP4 link, no API call or cookies needed. Either way you end up downloading a plain file over HTTP.
 
 A single connection to the CDN is capped at roughly 1 MB/s, so by default each file is fetched in several parallel ranges and stitched back together, which is usually several times faster. Tune it with `--connections` if you want.
 

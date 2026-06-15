@@ -1,11 +1,15 @@
 #!/usr/bin/env node
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { Command } from 'commander';
 import {
   fetchCatalog,
   fetchEpisodes,
-  resolveSource,
+  resolveEpisode,
+  collectEpisodesFromUrl,
+  classifyUrl,
+  detectSource,
   downloadSource,
+  downloadHls,
   extensionFromType,
   sanitizeFilename,
   filterByYearSeason,
@@ -23,7 +27,7 @@ import type { Anime, Episode, NetOptions } from 'anime1-core';
 import { MAX_CONCURRENCY, VERSION } from './constants.js';
 import { askOutputDir, pickEpisodes, pickSeason, pickSeries, pickYear } from './prompts.js';
 import { createSpinner, createProgressBar } from './ui.js';
-import { parseMinInterval, resolveBaseDir, resolveSeriesDir } from './args.js';
+import { parseMinInterval, resolveBaseDir, resolveSeriesDir, splitUrlArgs, deriveSeriesName } from './args.js';
 
 interface CliOptions {
   year?: string;
@@ -44,8 +48,11 @@ interface CliOptions {
 const program = new Command();
 program
   .name('anime1')
-  .description('Browse anime1.me by year and season and download episodes.')
+  .description(
+    'Browse anime1.me by year and season, or pass anime1.me / anime1.pw episode or category URLs, and download episodes.',
+  )
   .version(VERSION)
+  .argument('[urls...]', 'anime1.me / anime1.pw episode or category URLs to download')
   .option('--year <year>', 'filter by year, e.g. 2025')
   .option('--season <season>', 'filter by season: spring|summer|autumn|winter or 春夏秋冬')
   .option('--search <text>', 'filter series by title text')
@@ -82,6 +89,12 @@ main().catch((err: unknown) => {
 });
 
 async function main(): Promise<void> {
+  const urls = splitUrlArgs(program.args);
+  if (urls.length > 0) {
+    await runUrlFlow(urls);
+    return;
+  }
+
   const catalog = await loadCatalog();
   process.stdout.write(`Loaded ${catalog.length} titles.\n`);
 
@@ -183,10 +196,67 @@ async function resolveOutDir(series: Anime | null): Promise<string> {
   return resolveSeriesDir(resolvedBase, sub);
 }
 
+async function runUrlFlow(urls: string[]): Promise<void> {
+  for (const url of urls) {
+    try {
+      const classification = classifyUrl(url);
+      if (!classification) {
+        const reason =
+          detectSource(url) === null
+            ? 'unsupported site (supported: anime1.me, anime1.pw)'
+            : 'not a recognizable episode or category URL';
+        process.stdout.write(`Skipping ${url}: ${reason}.\n`);
+        continue;
+      }
+      const episodes = await loadEpisodesFromUrl(url);
+      const chosen = await chooseEpisodes(episodes);
+      if (chosen.length === 0) {
+        process.stdout.write('Nothing selected.\n');
+        continue;
+      }
+      if (opts.extract) {
+        await extractEpisodes(chosen);
+        continue;
+      }
+      const outDir = await resolveUrlOutDir(url, episodes);
+      await downloadEpisodes(chosen, outDir);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stdout.write(`Error for ${url}: ${message}\n`);
+    }
+  }
+}
+
+async function loadEpisodesFromUrl(url: string): Promise<Episode[]> {
+  const spinner = createSpinner(`Loading episodes from ${url} ...`);
+  spinner.start();
+  try {
+    const episodes = await collectEpisodesFromUrl(url, net);
+    if (episodes.length === 0) throw new Error('No episodes found.');
+    return episodes;
+  } finally {
+    spinner.stop();
+  }
+}
+
+async function resolveUrlOutDir(url: string, episodes: Episode[]): Promise<string> {
+  let base = opts.out;
+  if (!resolveBaseDir(base, '') && isTty && !opts.all) {
+    base = await askOutputDir('./downloads');
+  }
+  const resolvedBase = resolveBaseDir(base, './downloads');
+  const name = deriveSeriesName(
+    episodes.map((episode) => episode.title),
+    url,
+  );
+  const sub = name ? sanitizeFilename(name) : '';
+  return resolveSeriesDir(resolvedBase, sub);
+}
+
 async function extractEpisodes(episodes: Episode[]): Promise<void> {
   for (const episode of episodes) {
     try {
-      const source = await resolveSource(episode.apiReq, net);
+      const source = await resolveEpisode(episode, net);
       const cookies = Object.entries(source.cookies)
         .map(([key, value]) => `${key}=${value}`)
         .join('; ');
@@ -229,13 +299,33 @@ async function downloadOne(
 ): Promise<void> {
   const label = `[${index}/${total}] ${episode.title}`;
   try {
-    const source = await resolveSource(episode.apiReq, net);
+    const source = await resolveEpisode(episode, net);
+    const base = resolve(outDir, sanitizeFilename(episode.title));
+
     if (source.isHls) {
-      process.stdout.write(`\n${label}\n  Skipped: HLS stream (.m3u8) not supported yet.\n`);
+      if (quiet || !isTty) {
+        process.stdout.write(`${label} ...\n`);
+        const finalPath = await downloadHls(source, base, { net, connections });
+        process.stdout.write(`${label} ✓ saved ${basename(finalPath)}\n`);
+      } else {
+        const bar = createProgressBar(label);
+        try {
+          await downloadHls(source, base, {
+            net,
+            connections,
+            onProgress: ({ received, total: bytesTotal }) => bar.update(received, bytesTotal),
+          });
+        } catch (err) {
+          bar.clear();
+          throw err;
+        }
+        bar.finish(`${label}  ✓ saved`);
+      }
       return;
     }
+
     const ext = extensionFromType(source.type);
-    const outPath = resolve(outDir, `${sanitizeFilename(episode.title)}.${ext}`);
+    const outPath = `${base}.${ext}`;
 
     if (quiet || !isTty) {
       process.stdout.write(`${label} ...\n`);

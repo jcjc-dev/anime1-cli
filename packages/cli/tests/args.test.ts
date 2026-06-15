@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { isAbsolute, resolve, sep } from 'node:path';
-import { parseMinInterval, resolveBaseDir, resolveSeriesDir } from '../src/args.js';
+import {
+  deriveSeriesName,
+  parseMinInterval,
+  resolveBaseDir,
+  resolveSeriesDir,
+  splitUrlArgs,
+} from '../src/args.js';
 
 describe('parseMinInterval', () => {
   it('returns the fallback when the flag is omitted', () => {
@@ -44,5 +50,35 @@ describe('resolveSeriesDir', () => {
     const abs = `${sep}etc`;
     expect(isAbsolute(abs)).toBe(true);
     expect(() => resolveSeriesDir('./downloads', abs)).toThrow();
+  });
+});
+
+describe('splitUrlArgs', () => {
+  it('splits comma- and whitespace-separated URL arguments', () => {
+    expect(splitUrlArgs(['https://anime1.me/1,https://anime1.me/2'])).toEqual([
+      'https://anime1.me/1',
+      'https://anime1.me/2',
+    ]);
+    expect(splitUrlArgs(['https://anime1.pw/349', '  https://anime1.pw/350  '])).toEqual([
+      'https://anime1.pw/349',
+      'https://anime1.pw/350',
+    ]);
+  });
+  it('drops empty fragments', () => {
+    expect(splitUrlArgs(['', '  ', 'https://anime1.me/1'])).toEqual(['https://anime1.me/1']);
+  });
+});
+
+describe('deriveSeriesName', () => {
+  it('strips a trailing episode marker from the first title', () => {
+    expect(deriveSeriesName(['杖與劍的魔劍譚 第二季 [12.5]', '... [13]'], 'https://anime1.pw/?cat=60')).toBe(
+      '杖與劍的魔劍譚 第二季',
+    );
+  });
+  it('falls back to the last URL path segment when titles are unusable', () => {
+    expect(deriveSeriesName(['[01]'], 'https://anime1.pw/one-piece')).toBe('one-piece');
+  });
+  it('returns an empty string when nothing is derivable', () => {
+    expect(deriveSeriesName([], 'not a url')).toBe('');
   });
 });

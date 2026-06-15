@@ -3,12 +3,24 @@ import { httpRequest } from './http.js';
 import type { Episode, NetOptions } from './types.js';
 
 /**
- * Loads every episode for a category, following pagination for long-running series.
+ * Loads every episode for a category id, following pagination for long-running
+ * series. Thin wrapper over {@link fetchEpisodesFromUrl} for the `?cat=` form.
  */
 export async function fetchEpisodes(catId: number, net: NetOptions = {}): Promise<Episode[]> {
-  const res = await httpRequest(`${SITE}/?cat=${catId}`, { net });
+  return fetchEpisodesFromUrl(`${SITE}/?cat=${catId}`, net);
+}
+
+/**
+ * Loads every anime1.me episode reachable from a category/episode page URL,
+ * following pagination for long-running series.
+ */
+export async function fetchEpisodesFromUrl(
+  startUrl: string,
+  net: NetOptions = {},
+): Promise<Episode[]> {
+  const res = await httpRequest(startUrl, { net });
   if (!res.ok) {
-    throw new Error(`Failed to load category ${catId} (HTTP ${res.status})`);
+    throw new Error(`Failed to load ${startUrl} (HTTP ${res.status})`);
   }
   const html = await res.text();
   const episodes = parseEpisodes(html);
@@ -17,7 +29,7 @@ export async function fetchEpisodes(catId: number, net: NetOptions = {}): Promis
   // category. Make that diagnosable instead of surfacing as "no episodes".
   if (episodes.length === 0 && looksLikeContentPage(html)) {
     throw new Error(
-      `Loaded category ${catId} (${html.length} bytes) but found no recognizable episodes. ` +
+      `Loaded ${startUrl} (${html.length} bytes) but found no recognizable episodes. ` +
         'anime1.me markup may have changed — the parser likely needs updating.',
     );
   }
@@ -100,7 +112,7 @@ function stripTags(value: string): string {
     .trim();
 }
 
-function parseEpisodeNumber(title: string): number | null {
+export function parseEpisodeNumber(title: string): number | null {
   const match = title.match(/\[(\d+)(?:-\d+)?\]\s*$/);
   return match ? Number(match[1]) : null;
 }
@@ -108,8 +120,9 @@ function parseEpisodeNumber(title: string): number | null {
 function dedupeAndSort(episodes: Episode[]): Episode[] {
   const seen = new Set<string>();
   const unique = episodes.filter((episode) => {
-    if (seen.has(episode.apiReq)) return false;
-    seen.add(episode.apiReq);
+    const key = episode.apiReq ?? episode.pageUrl ?? episode.title;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
   unique.sort((a, b) => {

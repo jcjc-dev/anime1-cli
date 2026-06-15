@@ -24,6 +24,8 @@ downloads/
 *.part
 *.part[0-9]*
 *.p[0-9]*
+*.assembling
+*.hlsparts/
 
 # Editor / OS cruft
 .DS_Store
