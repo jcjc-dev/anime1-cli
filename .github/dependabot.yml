@@ -16,3 +16,9 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: deps
+    ignore:
+      # The project supports Node 20+ (engines.node: ">=20"). @types/node major
+      # tracks the Node runtime major, so pin it to the v20 line — a v25 bump
+      # would let code typecheck against APIs that don't exist on Node 20.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
