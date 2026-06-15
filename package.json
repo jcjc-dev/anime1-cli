@@ -1,6 +1,6 @@
 {
   "name": "anime1",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Monorepo for anime1-cli: a CLI and a reusable engine (anime1-core) to browse and download from anime1.me.",
   "license": "MIT",
   "private": true,
