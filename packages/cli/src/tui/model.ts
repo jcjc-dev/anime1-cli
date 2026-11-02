@@ -20,6 +20,7 @@ export type ActionResult =
   | { type: 'none' }
   | { type: 'load-episodes'; series: Anime }
   | { type: 'download'; series: Anime; episodes: Episode[]; outDir: string }
+  | { type: 'queue'; series: Anime; episodes: Episode[]; outDir: string }
   | { type: 'exit' };
 
 export interface BrowseState {
@@ -283,6 +284,21 @@ export function confirmDownload(state: BrowseState): Step {
       ? state.episodes.filter((_, i) => state.selectedEpisodeIndexes.has(i))
       : state.episodes;
   return { state, action: { type: 'download', series, episodes: chosen, outDir: state.outDir } };
+}
+
+/**
+ * Queues the current selection for background download (the TUI keeps running).
+ * Behaves like {@link confirmDownload} but returns a 'queue' action instead of
+ * 'download'.
+ */
+export function queueDownload(state: BrowseState): Step {
+  const series = state.selectedSeries;
+  if (!series || state.episodes.length === 0) return { state, action: { type: 'none' } };
+  const chosen =
+    state.selectedEpisodeIndexes.size > 0
+      ? state.episodes.filter((_, i) => state.selectedEpisodeIndexes.has(i))
+      : state.episodes;
+  return { state, action: { type: 'queue', series, episodes: chosen, outDir: state.outDir } };
 }
 
 /** Records the result of an async episode load into the state. */

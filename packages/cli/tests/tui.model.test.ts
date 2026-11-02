@@ -7,6 +7,7 @@ import {
   moveDown,
   moveLeft,
   moveRight,
+  queueDownload,
   setEpisodes,
   toggleEpisode,
   typeFilter,
@@ -205,5 +206,26 @@ describe('action shape sanity', () => {
     const { state } = reachEpisodes();
     const step = confirmDownload(state) as { action: Extract<ActionResult, { type: 'download' }> };
     expect(step.action.outDir).toBe('./downloads');
+  });
+});
+
+describe('queueDownload', () => {
+  it('returns a queue action with the chosen episodes', () => {
+    const { state } = reachEpisodes();
+    let s = toggleEpisode(state, 0).state;
+    s = toggleEpisode(s, 2).state;
+    const step = queueDownload(s);
+    expect(step.action.type).toBe('queue');
+    if (step.action.type === 'queue') {
+      expect(step.action.episodes.map((e) => e.number)).toEqual([1, 3]);
+      expect(step.action.series.title).toBe('Alpha');
+      expect(step.action.outDir).toBe('./downloads');
+    }
+  });
+
+  it('returns no action when there are no episodes loaded', () => {
+    const s = createBrowseState(catalog, './x');
+    const step = queueDownload(s);
+    expect(step.action.type).toBe('none');
   });
 });

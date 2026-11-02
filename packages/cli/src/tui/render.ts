@@ -4,7 +4,8 @@
 
 import type { Anime, Episode } from 'anime1-core';
 import { SEASON_EN } from 'anime1-core';
-import { displayWidth, truncateToWidth } from '../ui.js';
+import { displayWidth, renderProgress, truncateToWidth } from '../ui.js';
+import type { Job } from '../downloader.js';
 import type { BrowseState, PaneKind } from './model.js';
 
 export interface RenderContext {
@@ -12,7 +13,16 @@ export interface RenderContext {
   width: number;
   /** Transient status line shown at the top (e.g. a download notice). */
   message?: string;
+  /** Live download-queue snapshot to render in a bottom panel. */
+  jobs?: Job[];
 }
+
+const JOB_ICON: Record<Job['status'], string> = {
+  queued: '○',
+  downloading: '↓',
+  done: '✓',
+  error: '✗',
+};
 
 export interface ScreenRow {
   text: string;
@@ -125,10 +135,28 @@ export function renderBrowse(ctx: RenderContext): ScreenRow[] {
     rows.push({ text, highlight });
   }
 
+  if (ctx.jobs && ctx.jobs.length > 0) {
+    rows.push({ text: '─'.repeat(width), highlight: false });
+    rows.push({ text: `Downloads (${ctx.jobs.length})`, highlight: false });
+    for (const job of ctx.jobs.slice(0, 8)) {
+      const status = JOB_ICON[job.status];
+      const progress =
+        job.status === 'done'
+          ? 'done'
+          : job.status === 'error'
+            ? job.error ?? 'failed'
+            : job.status === 'downloading'
+              ? renderProgress(job.progress.received, job.progress.total)
+              : 'queued';
+      const line = `${status} ${job.seriesTitle} — ${job.episode.title}  ${progress}`;
+      rows.push({ text: truncateToWidth(line, width), highlight: false });
+    }
+  }
+
   const picked = selectedCount(state);
   const footer =
     `←/→ move  ↑/↓ select  Enter drill/select  Space toggle  Backspace back  ` +
-    `d download${picked > 0 ? ` (${picked})` : ''}  q quit  —  ${state.outDir}`;
+    `d queue${picked > 0 ? ` (${picked})` : ''}  q quit  —  ${state.outDir}`;
   rows.push({ text: '─'.repeat(width), highlight: false });
   rows.push({ text: truncateToWidth(footer, width), highlight: false });
   return rows;

@@ -82,3 +82,38 @@ describe('renderBrowse', () => {
     }
   });
 });
+
+describe('renderBrowse queue panel', () => {
+  it('renders queued jobs with their status', () => {
+    const state = toEpisodes();
+    const jobs = [
+      {
+        id: 2,
+        seriesTitle: 'Alpha',
+        episode: { title: 'Alpha [2]', number: 2, apiReq: 'b' },
+        status: 'downloading',
+        progress: { received: 512, total: 1024 },
+        outDir: './downloads/Alpha',
+      },
+      {
+        id: 1,
+        seriesTitle: 'Alpha',
+        episode: { title: 'Alpha [1]', number: 1, apiReq: 'a' },
+        status: 'queued',
+        progress: { received: 0, total: null },
+        outDir: './downloads/Alpha',
+      },
+    ];
+    const rows = renderBrowse({ state, width: 160, jobs });
+    const text = rows.map((r) => r.text).join('\n');
+    expect(text).toContain('Downloads (2)');
+    expect(text).toContain('Alpha — Alpha [2]');
+    expect(text).toContain('Alpha — Alpha [1]');
+  });
+
+  it('omits the queue panel when there are no jobs', () => {
+    const rows = renderBrowse({ state: toEpisodes(), width: 160 });
+    const text = rows.map((r) => r.text).join('\n');
+    expect(text).not.toContain('Downloads (');
+  });
+});

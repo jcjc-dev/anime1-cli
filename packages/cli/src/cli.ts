@@ -137,10 +137,13 @@ async function main(): Promise<void> {
 async function maybeRunTui(catalog: Anime[]): Promise<boolean> {
   if (!opts.tui || !isTty || process.stdin.isTTY !== true) return false;
   const base = resolveBaseDir(opts.out, './downloads');
-  const action = await runTui(catalog, { net, outDir: base });
-  if (action.type === 'download') {
-    const seriesDir = resolveSeriesDir(base, sanitizeFilename(action.series.title));
-    await downloadEpisodes(action.episodes, seriesDir);
+  const requested = Math.max(1, Number(opts.concurrency) || 1);
+  const concurrency = Math.min(requested, MAX_CONCURRENCY);
+  const { queue } = await runTui(catalog, { net, outDir: base, connections, concurrency });
+  await queue.idle();
+  const summary = queue.summary();
+  if (summary.total > 0) {
+    process.stdout.write(`\nDownloads complete: ${summary.done} ok, ${summary.error} failed.\n`);
   }
   return true;
 }
