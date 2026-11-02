@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { access } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { Command } from 'commander';
 import {
@@ -17,6 +18,7 @@ import {
   listYears,
   searchByTitle,
   normalizeSeason,
+  splitExisting,
   setMinRequestInterval,
   SEASON_EN,
   DEFAULT_CONNECTIONS,
@@ -43,6 +45,7 @@ interface CliOptions {
   minInterval: string;
   userAgent?: string;
   cfClearance?: string;
+  skipExisting?: boolean;
 }
 
 const program = new Command();
@@ -61,6 +64,10 @@ program
   .option('--out <dir>', 'output directory')
   .option('--list', 'print the catalog (respects --year/--season/--search) and exit')
   .option('--extract', 'print resolved video URLs and cookies instead of downloading')
+  .option(
+    '--skip-existing',
+    'skip episodes whose file is already downloaded; re-run against an existing folder to fetch only new episodes',
+  )
   .option('--concurrency <n>', `number of episodes to download in parallel (max ${MAX_CONCURRENCY})`, '1')
   .option(
     '--connections <n>',
@@ -271,20 +278,33 @@ async function extractEpisodes(episodes: Episode[]): Promise<void> {
 }
 
 async function downloadEpisodes(episodes: Episode[], outDir: string): Promise<void> {
+  let toDownload = episodes;
+  if (opts.skipExisting) {
+    const { missing, existing } = await splitExisting(episodes, outDir, fileExists);
+    if (existing.length > 0) {
+      process.stdout.write(`Skipping ${existing.length} already-downloaded episode(s).\n`);
+    }
+    toDownload = missing;
+    if (toDownload.length === 0) {
+      process.stdout.write('Everything is already downloaded; nothing to do.\n');
+      return;
+    }
+  }
+
   const requested = Math.max(1, Number(opts.concurrency) || 1);
   const concurrency = Math.min(requested, MAX_CONCURRENCY);
   if (requested > concurrency) {
     process.stdout.write(`Note: capping concurrency at ${MAX_CONCURRENCY} to avoid overloading the server.\n`);
   }
-  process.stdout.write(`Downloading ${episodes.length} episode(s) to ${outDir}\n`);
+  process.stdout.write(`Downloading ${toDownload.length} episode(s) to ${outDir}\n`);
 
   if (concurrency === 1) {
-    for (let i = 0; i < episodes.length; i++) {
-      await downloadOne(episodes[i], outDir, i + 1, episodes.length, false);
+    for (let i = 0; i < toDownload.length; i++) {
+      await downloadOne(toDownload[i], outDir, i + 1, toDownload.length, false);
     }
   } else {
-    await runPool(episodes, concurrency, (episode, index) =>
-      downloadOne(episode, outDir, index + 1, episodes.length, true),
+    await runPool(toDownload, concurrency, (episode, index) =>
+      downloadOne(episode, outDir, index + 1, toDownload.length, true),
     );
   }
   process.stdout.write('\nDone.\n');
@@ -368,6 +388,16 @@ function printList(catalog: Anime[]): void {
         process.stdout.write(`    [${anime.catId}] ${anime.title} — ${anime.episodes}\n`);
       }
     }
+  }
+}
+
+/** True when a file exists on disk (probe injected into splitExisting). */
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
   }
 }
 

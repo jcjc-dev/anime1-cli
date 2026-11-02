@@ -2,6 +2,12 @@
 // Frontends (CLI, web, desktop) compose these primitives.
 
 export type { Anime, Episode, ResolvedSource, NetOptions } from './types.js';
+export {
+  CANDIDATE_EXTENSIONS,
+  episodeOutputCandidates,
+  splitExisting,
+} from './existing.js';
+export type { ExistingSplit } from './existing.js';
 export type { DownloadOptions, DownloadProgress, Segment } from './download.js';
 export type { SourceKind, UrlKind, UrlClassification } from './sources.js';
 export type { HlsDownloadOptions, HlsVariant, MediaPlaylist, HlsSegment, HlsKey } from './hls.js';

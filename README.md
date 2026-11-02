@@ -107,6 +107,7 @@ anime1 --list --year 2026 --season spring
 | `--concurrency <n>` | Episodes downloaded at once (default 1, max 4) |
 | `--list` | Print the catalogue and exit |
 | `--extract` | Print video URLs and cookies, no download |
+| `--skip-existing` | Skip episodes whose file is already downloaded; re-run against an existing folder to fetch only new episodes |
 | `--min-interval <ms>` | Smallest gap between requests (default 250) |
 | `--user-agent <ua>` | Custom User-Agent, if Cloudflare gets in the way |
 | `--cf-clearance <cookie>` | `cf_clearance` cookie, if Cloudflare gets in the way |
