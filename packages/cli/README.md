@@ -70,6 +70,7 @@ anime1 --list --year 2026 --season spring
 | `--concurrency <n>` | Episodes downloaded at once (default 1, max 4) |
 | `--list` | Print the catalogue and exit |
 | `--extract` | Print video URLs and cookies, no download |
+| `--tui` | Open the columnar terminal browser: arrow keys move between panes, Enter drills in, backspace goes back |
 | `--min-interval <ms>` | Smallest gap between requests (default 250) |
 | `--user-agent <ua>` | Custom User-Agent, if Cloudflare gets in the way |
 | `--cf-clearance <cookie>` | `cf_clearance` cookie, if Cloudflare gets in the way |

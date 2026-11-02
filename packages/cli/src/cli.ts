@@ -28,6 +28,7 @@ import { MAX_CONCURRENCY, VERSION } from './constants.js';
 import { askOutputDir, pickEpisodes, pickSeason, pickSeries, pickYear } from './prompts.js';
 import { createSpinner, createProgressBar } from './ui.js';
 import { parseMinInterval, resolveBaseDir, resolveSeriesDir, splitUrlArgs, deriveSeriesName } from './args.js';
+import { runTui } from './tui/index.js';
 
 interface CliOptions {
   year?: string;
@@ -43,6 +44,7 @@ interface CliOptions {
   minInterval: string;
   userAgent?: string;
   cfClearance?: string;
+  tui?: boolean;
 }
 
 const program = new Command();
@@ -61,6 +63,10 @@ program
   .option('--out <dir>', 'output directory')
   .option('--list', 'print the catalog (respects --year/--season/--search) and exit')
   .option('--extract', 'print resolved video URLs and cookies instead of downloading')
+  .option(
+    '--tui',
+    'open the columnar terminal browser (arrow keys to navigate, backspace to go back)',
+  )
   .option('--concurrency <n>', `number of episodes to download in parallel (max ${MAX_CONCURRENCY})`, '1')
   .option(
     '--connections <n>',
@@ -98,6 +104,8 @@ async function main(): Promise<void> {
   const catalog = await loadCatalog();
   process.stdout.write(`Loaded ${catalog.length} titles.\n`);
 
+  if (await maybeRunTui(catalog)) return;
+
   if (opts.list) {
     printList(catalog);
     return;
@@ -119,6 +127,22 @@ async function main(): Promise<void> {
 
   const outDir = await resolveOutDir(series);
   await downloadEpisodes(chosen, outDir);
+}
+
+/**
+ * Runs the columnar TUI when requested and the terminal supports it. Returns
+ * true when the TUI handled the run (including "quit"), false to fall through
+ * to the prompt flow.
+ */
+async function maybeRunTui(catalog: Anime[]): Promise<boolean> {
+  if (!opts.tui || !isTty || process.stdin.isTTY !== true) return false;
+  const base = resolveBaseDir(opts.out, './downloads');
+  const action = await runTui(catalog, { net, outDir: base });
+  if (action.type === 'download') {
+    const seriesDir = resolveSeriesDir(base, sanitizeFilename(action.series.title));
+    await downloadEpisodes(action.episodes, seriesDir);
+  }
+  return true;
 }
 
 async function loadCatalog(): Promise<Anime[]> {
