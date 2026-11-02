@@ -48,6 +48,9 @@ Either way you end up with the `anime1` command. From a source checkout you can 
 
 ## Usage
 
+For the full, step-by-step guide to every flag and flow, see
+[`docs/USAGE.md`](docs/USAGE.md). A quick overview:
+
 Run it with no arguments and it walks you through everything:
 
 ```sh

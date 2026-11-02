@@ -34,6 +34,9 @@ That puts an `anime1` command on your PATH. If you would rather not link it glob
 
 ## Usage
 
+For the full, step-by-step guide to every flag and flow, see
+[`docs/USAGE.md`](../../docs/USAGE.md) at the repo root. A quick overview:
+
 Run it with no arguments and it walks you through everything:
 
 ```sh
