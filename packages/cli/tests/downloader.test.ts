@@ -108,3 +108,35 @@ describe('DownloadQueue', () => {
     expect(jobs[0].outDir).toBe('/o/My_Series');
   });
 });
+
+describe('DownloadQueue.remove', () => {
+  it('removes a queued job', async () => {
+    const gate = deferred();
+    const queue = new DownloadQueue({ net: {}, connections: 1, concurrency: 1, perform: () => gate.promise });
+    queue.add('S', [ep(1), ep(2)], '/o');
+    // job 1 is downloading; job 2 is queued.
+    const queued = queue.snapshot().find((j) => j.status === 'queued');
+    expect(queued).toBeDefined();
+    queue.remove(queued!.id);
+    expect(queue.snapshot().length).toBe(1);
+    gate.resolve();
+    await queue.idle();
+  });
+
+  it('leaves a downloading job in place', async () => {
+    const gate = deferred();
+    const queue = new DownloadQueue({
+      net: {},
+      connections: 1,
+      concurrency: 1,
+      perform: () => gate.promise,
+    });
+    queue.add('S', [ep(1)], '/o');
+    const job = queue.snapshot()[0];
+    expect(job.status).toBe('downloading');
+    queue.remove(job.id);
+    expect(queue.snapshot().length).toBe(1);
+    gate.resolve();
+    await queue.idle();
+  });
+});

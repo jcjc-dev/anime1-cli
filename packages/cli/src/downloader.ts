@@ -121,6 +121,18 @@ export class DownloadQueue {
     return [...this.jobs].reverse();
   }
 
+  /**
+   * Removes a job from the queue. Mid-download jobs are left alone; queued and
+   * finished jobs can be dropped freely.
+   */
+  remove(id: number): void {
+    const index = this.jobs.findIndex((job) => job.id === id);
+    if (index === -1) return;
+    if (this.jobs[index].status === 'downloading') return;
+    this.jobs.splice(index, 1);
+    this.options.onUpdate?.();
+  }
+
   summary(): QueueSummary {
     let queued = 0;
     let downloading = 0;

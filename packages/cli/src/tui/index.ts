@@ -50,6 +50,13 @@ const ALT_ON = `${ESC}[?1049h`; // enter alternate screen buffer
 const ALT_OFF = `${ESC}[?1049l`; // leave alternate screen buffer
 const DRAW_INTERVAL_MS = 120;
 
+function clamp(index: number, length: number): number {
+  if (length <= 0) return 0;
+  if (index < 0) return 0;
+  if (index >= length) return length - 1;
+  return index;
+}
+
 /**
  * Runs the interactive columnar browser with a background download queue. The
  * user browses and queues episodes ('d'); downloads run in the background and
@@ -62,6 +69,8 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
     let loadToken = 0;
     let finishing = false;
     let message = '';
+    let mode: 'browse' | 'queue' = 'browse';
+    let queueCursor = 0;
     let lastDraw = 0;
     let pendingDraw: ReturnType<typeof setTimeout> | null = null;
 
@@ -78,7 +87,15 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
 
     const draw = (): void => {
       pendingDraw = null;
-      const rows = renderBrowse({ state, width: width(), height: height(), message, jobs: queue.snapshot() });
+      const rows = renderBrowse({
+        state,
+        width: width(),
+        height: height(),
+        message,
+        jobs: queue.snapshot(),
+        mode,
+        queueCursor,
+      });
       // Repaint in place — no full-screen reset/clear, which is what causes the
       // flash. Home the cursor, rewrite each line (clearing it first so a shorter
       // line never leaves stale characters), then clear any leftover rows below.
@@ -135,6 +152,64 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
 
     const onKey = (str: string, key: { name?: string; ctrl?: boolean }): void => {
       if (finishing) return;
+
+      // Keys that work in both modes.
+      if (key.ctrl && key.name === 'c') {
+        finish();
+        return;
+      }
+      if (key.name === 'q' && (mode === 'queue' || state.active !== 2)) {
+        finish();
+        return;
+      }
+      if (key.name === 'tab') {
+        mode = mode === 'browse' ? 'queue' : 'browse';
+        queueCursor = clamp(queueCursor, queue.snapshot().length);
+        draw();
+        return;
+      }
+
+      // The Downloads view is separate from browsing the catalogue.
+      if (mode === 'queue') {
+        const jobs = queue.snapshot();
+        switch (key.name) {
+          case 'up':
+            queueCursor = clamp(queueCursor - 1, jobs.length);
+            break;
+          case 'down':
+            queueCursor = clamp(queueCursor + 1, jobs.length);
+            break;
+          case 'pageup':
+            queueCursor = clamp(queueCursor - pageSize(), jobs.length);
+            break;
+          case 'pagedown':
+            queueCursor = clamp(queueCursor + pageSize(), jobs.length);
+            break;
+          case 'home':
+            queueCursor = 0;
+            break;
+          case 'end':
+            queueCursor = jobs.length > 0 ? jobs.length - 1 : 0;
+            break;
+          case 'backspace':
+          case 'escape':
+            mode = 'browse';
+            break;
+          case 'x': {
+            const job = jobs[queueCursor];
+            if (job) {
+              queue.remove(job.id);
+              queueCursor = clamp(queueCursor, queue.snapshot().length);
+            }
+            break;
+          }
+          default:
+            return;
+        }
+        draw();
+        return;
+      }
+
       let step;
       switch (key.name) {
         case 'up':
@@ -169,16 +244,9 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
           step = state.active === 2 && state.filter.length > 0 ? backspaceFilter(state) : moveLeft(state);
           break;
         default:
-          if (key.ctrl && key.name === 'c') {
-            finish();
-            return;
-          }
           if (key.name === 'd' && state.active === 3) step = queueDownload(state);
           else if (key.name === 'a' && state.active === 3) step = toggleSelectAll(state);
-          else if (key.name === 'q' && state.active !== 2) {
-            finish();
-            return;
-          } else if (str && str.length === 1 && str.codePointAt(0)! >= 32 && str !== '\x7f') {
+          else if (str && str.length === 1 && str.codePointAt(0)! >= 32 && str !== '\x7f') {
             step = typeFilter(state, str);
           } else return;
       }

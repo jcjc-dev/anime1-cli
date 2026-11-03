@@ -17,8 +17,12 @@ export interface RenderContext {
   height: number;
   /** Transient status line shown in the title (e.g. a download notice). */
   message?: string;
-  /** Live download-queue snapshot to render in a bottom panel. */
+  /** Live download-queue snapshot to render in a bottom panel (browse) or as its own view. */
   jobs?: Job[];
+  /** Whether to show the full queue view (Tab toggles between browse and queue). */
+  mode?: 'browse' | 'queue';
+  /** Cursor into the queue list when mode === 'queue'. */
+  queueCursor?: number;
 }
 
 /** A character range (in the row's plain text) to render in reverse video. */
@@ -135,6 +139,7 @@ function scrollMarkers(window: { start: number; end: number }, length: number): 
 
 /** Renders the browse view into screen rows (plain text, no ANSI). */
 export function renderBrowse(ctx: RenderContext): ScreenRow[] {
+  if (ctx.mode === 'queue') return renderQueueView(ctx);
   const { state, width } = ctx;
   const colWidth = Math.max(8, Math.floor((width - SPACING * (4 - 1)) / 4));
   const pageHeight = computePageHeight(ctx.height, ctx.jobs?.length ?? 0);
@@ -204,9 +209,44 @@ export function renderBrowse(ctx: RenderContext): ScreenRow[] {
   const picked = selectedCount(state);
   const footer =
     `←/→ move  ↑/↓ select  PgUp/PgDn page  Home/End jump  Enter drill/select  ` +
-    `Space toggle  a all/none  Backspace back  d queue${picked > 0 ? ` (${picked})` : ''}  q quit`;
+    `Space toggle  a all/none  Backspace back  d queue${picked > 0 ? ` (${picked})` : ''}  Tab downloads  q quit`;
   rows.push({ text: '─'.repeat(width) });
   rows.push({ text: truncateToWidth(footer, width) });
+  return rows;
+}
+
+/** Renders the standalone Downloads (queue) view, distinct from the browse panes. */
+function renderQueueView(ctx: RenderContext): ScreenRow[] {
+  const { width, height, jobs = [], queueCursor = 0 } = ctx;
+  const rows: ScreenRow[] = [];
+  const pageHeight = Math.max(3, Math.floor(height) - 4); // title + sep + footer sep + footer
+  const win = windowSlice(jobs, queueCursor, pageHeight);
+  const marks = jobs.length > pageHeight ? `${win.start > 0 ? '▲' : ''}${win.end < jobs.length ? '▼' : ''}` : '';
+  rows.push({ text: truncateToWidth(`anime1 — Downloads (${jobs.length})${marks}`, width) });
+  rows.push({ text: '─'.repeat(width) });
+
+  if (jobs.length === 0) {
+    rows.push({ text: 'Queue is empty. Press Tab to browse and queue downloads.' });
+  } else {
+    for (let r = 0; r < win.visible.length; r++) {
+      const job = win.visible[r];
+      const icon = job.status === 'queued' ? '○' : job.status === 'downloading' ? '↓' : job.status === 'done' ? '✓' : '✗';
+      const progress =
+        job.status === 'done'
+          ? 'done'
+          : job.status === 'error'
+            ? (job.error ?? 'failed')
+            : job.status === 'downloading'
+              ? renderProgress(job.progress.received, job.progress.total)
+              : 'queued';
+      const active = win.start + r === queueCursor;
+      const text = truncateToWidth(`${active ? '▸ ' : '  '}${icon} ${job.seriesTitle} — ${job.episode.title}   ${progress}`, width);
+      rows.push(active ? { text, ranges: [{ start: 0, end: text.length }] } : { text });
+    }
+  }
+
+  rows.push({ text: '─'.repeat(width) });
+  rows.push({ text: truncateToWidth('↑/↓ move  x remove  Tab browse  q quit', width) });
   return rows;
 }
 

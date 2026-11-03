@@ -183,3 +183,43 @@ describe('column alignment', () => {
     expect(col).toBeGreaterThanOrEqual(2 * colWidth);
   });
 });
+
+describe('queue view', () => {
+  const jobs = [
+    {
+      id: 2,
+      seriesTitle: 'Alpha',
+      episode: { title: 'Alpha [2]', number: 2, apiReq: 'b' },
+      status: 'downloading' as const,
+      progress: { received: 512, total: 1024 },
+      outDir: './downloads/Alpha',
+    },
+    {
+      id: 1,
+      seriesTitle: 'Beta',
+      episode: { title: 'Beta [1]', number: 1, apiReq: 'a' },
+      status: 'queued' as const,
+      progress: { received: 0, total: null },
+      outDir: './downloads/Beta',
+    },
+  ];
+
+  it('renders the queue as its own view with a cursor', () => {
+    const state = toEpisodes();
+    const rows = renderBrowse({ state, width: 160, height: 24, jobs, mode: 'queue', queueCursor: 1 });
+    const text = rows.map((r) => r.text).join('\n');
+    expect(text).toContain('Downloads (2)');
+    expect(text).toContain('Alpha — Alpha [2]');
+    expect(text).toContain('Beta — Beta [1]');
+    expect(text).toContain('Tab browse');
+    // The cursor row (queueCursor 1 = Beta) is highlighted and marked.
+    const cursor = rows.find((r) => r.text.startsWith('▸'));
+    expect(cursor?.text).toContain('Beta');
+    expect(cursor?.ranges?.length).toBeGreaterThan(0);
+  });
+
+  it('shows an empty-state message with no jobs', () => {
+    const rows = renderBrowse({ state: toEpisodes(), width: 160, height: 24, jobs: [], mode: 'queue', queueCursor: 0 });
+    expect(rows.map((r) => r.text).join('\n')).toContain('Queue is empty');
+  });
+});

@@ -114,7 +114,10 @@ the active column is marked with `▸`, and the highlight follows only the selec
 cell (column × row), never the whole line. Long lists scroll within the terminal
 (`↑/↓` to move, `PgUp/PgDn` to page, `Home/End` to jump, `▲/▼` in a column header
 show which way more items are). On the episodes pane, `Space` toggles one episode
-and `a` selects / unselects all of them.
+and `a` selects / unselects all of them. **Tab** switches to a separate
+**Downloads** view — a full queue listing (status, progress, series, output
+dir) with its own cursor where you can move with `↑/↓`, drop a queued job with
+`x`, and jump back to browsing with Tab or Backspace.
 | `--min-interval <ms>` | Smallest gap between requests (default 250) |
 | `--user-agent <ua>` | Custom User-Agent, if Cloudflare gets in the way |
 | `--cf-clearance <cookie>` | `cf_clearance` cookie, if Cloudflare gets in the way |
