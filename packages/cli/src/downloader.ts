@@ -4,7 +4,8 @@
 // injected (the CLI wires in resolve+download; tests inject a fake), so this is
 // fully unit-testable.
 
-import { resolve as pathResolve } from 'node:path';
+import { resolve as pathResolve, basename, dirname, join } from 'node:path';
+import { readdir, rm } from 'node:fs/promises';
 import type { Episode, NetOptions } from 'anime1-core';
 import {
   downloadHls,
@@ -32,6 +33,8 @@ export interface Job {
   outDir: string;
   /** Abort controller used to cancel an in-flight download. */
   controller?: AbortController;
+  /** Sanitized output base (no extension) — lets cancel() remove partial files. */
+  basePath?: string;
 }
 
 export interface QueueSummary {
@@ -63,6 +66,7 @@ async function defaultPerform(
 ): Promise<void> {
   const source = await resolveEpisode(job.episode, ctx.net);
   const base = pathResolve(job.outDir, sanitizeFilename(job.episode.title));
+  job.basePath = base;
   const onProgress = (p: { received: number; total: number | null }): void =>
     report(p.received, p.total);
   const signal = job.controller?.signal;
@@ -77,6 +81,29 @@ async function defaultPerform(
     onProgress,
     signal,
   });
+}
+
+/**
+ * Removes leftover partial-download artifacts for a job's output base path.
+ * Matches `.part`, `.assembling`, HLS `.hlsparts` directories, and segmented
+ * `.p<n>` parts — never the final `.mp4`/`.ts` file, so a previously-completed
+ * download is left untouched.
+ */
+async function cleanupPartialFiles(basePath: string): Promise<void> {
+  const dir = dirname(basePath);
+  const stem = basename(basePath);
+  let entries: string[];
+  try {
+    entries = await readdir(dir);
+  } catch {
+    return; // output directory not created yet — nothing to clean
+  }
+  const pattern = /\.p\d+$|\.part$|\.assembling$|hlsparts$/;
+  await Promise.all(
+    entries
+      .filter((name) => name.startsWith(`${stem}.`) && pattern.test(name))
+      .map((name) => rm(join(dir, name), { recursive: true, force: true })),
+  );
 }
 
 export class DownloadQueue {
@@ -130,9 +157,9 @@ export class DownloadQueue {
   }
 
   /**
-   * Cancels a job. Queued and finished jobs are dropped; a job that is currently
-   * downloading is aborted (its partial files stay on disk for resume) and then
-   * removed from the list.
+   * Cancels a job. A downloading job is aborted and its partial files are
+   * removed from disk; queued/finished jobs are just dropped. Previously
+   * completed final files are never touched.
    */
   cancel(id: number): void {
     const index = this.jobs.findIndex((job) => job.id === id);
@@ -144,10 +171,12 @@ export class DownloadQueue {
       this.running = Math.max(0, this.running - 1);
       this.options.onUpdate?.();
       this.kick();
+      if (job.basePath) void cleanupPartialFiles(job.basePath);
       return;
     }
     this.jobs.splice(index, 1);
     this.options.onUpdate?.();
+    if (job.basePath && job.status !== 'done') void cleanupPartialFiles(job.basePath);
   }
 
   summary(): QueueSummary {

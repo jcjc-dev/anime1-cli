@@ -117,8 +117,9 @@ show which way more items are). On the episodes pane, `Space` toggles one episod
 and `a` selects / unselects all of them. **Tab** switches to a separate
 **Downloads** view — a full queue listing (status, progress, series, output
 dir) with its own cursor where you can move with `↑/↓`, cancel a job with `x`
-(including one that is currently downloading — its partial files stay on disk
-so it can resume later), and jump back to browsing with Tab or Backspace.
+(including one that is currently downloading — any partial files are removed
+from disk, while a previously completed final file is left alone), and jump
+back to browsing with Tab or Backspace.
 | `--min-interval <ms>` | Smallest gap between requests (default 250) |
 | `--user-agent <ua>` | Custom User-Agent, if Cloudflare gets in the way |
 | `--cf-clearance <cookie>` | `cf_clearance` cookie, if Cloudflare gets in the way |

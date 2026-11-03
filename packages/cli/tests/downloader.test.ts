@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Episode } from 'anime1-core';
 import { DownloadQueue } from '../src/downloader.js';
@@ -134,5 +136,42 @@ describe('DownloadQueue.cancel', () => {
     expect(job.controller?.signal.aborted).toBe(true);
     gate.resolve();
     await queue.idle();
+  });
+});
+
+describe('DownloadQueue partial cleanup', () => {
+  it('removes partial files for a cancelled downloading job but keeps the final file', async () => {
+    const dir = mkdtempSync(join(import.meta.dirname, '..', '.tmp-cleanup-'));
+    try {
+      const stem = join(dir, 'Show 1');
+      const finalMp4 = `${stem}.mp4`;
+      const part = `${stem}.mp4.part`;
+      const seg = `${stem}.mp4.t100.c6.p0`;
+      const assembling = `${stem}.mp4.assembling`;
+      const hlsparts = `${stem}.hlsparts`;
+      writeFileSync(finalMp4, 'complete');
+      writeFileSync(part, 'x');
+      writeFileSync(seg, 'x');
+      writeFileSync(assembling, 'x');
+      mkdirSync(hlsparts);
+
+      const gate = deferred();
+      const queue = new DownloadQueue({ net: {}, connections: 1, concurrency: 1, perform: () => gate.promise });
+      queue.add('S', [ep(1)], dir);
+      const job = queue.snapshot()[0];
+      job.basePath = stem; // simulate that the download started
+      queue.cancel(job.id);
+      gate.resolve();
+      await queue.idle();
+      await new Promise((r) => setTimeout(r, 20)); // let async cleanup finish
+
+      expect(existsSync(part)).toBe(false);
+      expect(existsSync(seg)).toBe(false);
+      expect(existsSync(assembling)).toBe(false);
+      expect(existsSync(hlsparts)).toBe(false);
+      expect(existsSync(finalMp4)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
