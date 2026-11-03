@@ -46,6 +46,8 @@ export interface TuiResult {
 const ESC = '\x1b';
 const REVERSE = `${ESC}[7m`;
 const RESET = `${ESC}[0m`;
+const ALT_ON = `${ESC}[?1049h`; // enter alternate screen buffer
+const ALT_OFF = `${ESC}[?1049l`; // leave alternate screen buffer
 const DRAW_INTERVAL_MS = 120;
 
 /**
@@ -77,10 +79,14 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
     const draw = (): void => {
       pendingDraw = null;
       const rows = renderBrowse({ state, width: width(), height: height(), message, jobs: queue.snapshot() });
-      process.stdout.write(`${ESC}c${ESC}[?25l`);
+      // Repaint in place — no full-screen reset/clear, which is what causes the
+      // flash. Home the cursor, rewrite each line (clearing it first so a shorter
+      // line never leaves stale characters), then clear any leftover rows below.
+      process.stdout.write(`${ESC}[H`);
       for (const row of rows) {
-        process.stdout.write(renderRow(row) + '\n');
+        process.stdout.write(renderRow(row) + `${ESC}[K\n`);
       }
+      process.stdout.write(`${ESC}[J`);
     };
 
     /**
@@ -123,7 +129,7 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
       process.stdout.removeListener('resize', onResize);
       if (process.stdin.isTTY) process.stdin.setRawMode(false);
       process.stdin.pause();
-      process.stdout.write(`${ESC}[?25h${ESC}[2J${ESC}[H`);
+      process.stdout.write(`${ESC}[?25h${ALT_OFF}`);
       resolve({ action: { type: 'exit' }, queue });
     };
 
@@ -215,6 +221,7 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
     process.stdin.on('keypress', onKey);
     process.stdout.on('resize', onResize);
     process.stdin.resume();
+    process.stdout.write(`${ALT_ON}${ESC}[?25l`);
     draw();
   });
 }
