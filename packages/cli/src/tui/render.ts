@@ -35,6 +35,8 @@ export interface ScreenRow {
   text: string;
   /** Character ranges to highlight — usually just the selected cell, never the whole line. */
   ranges?: HighlightRange[];
+  /** Visual style applied by the shell (title bar, footer, dimmed content). */
+  style?: 'title' | 'footer' | 'dim';
 }
 
 const PANE_HEADERS: Record<PaneKind, string> = {
@@ -168,7 +170,7 @@ export function renderBrowse(ctx: RenderContext): ScreenRow[] {
   if (state.selectedSeries) crumb.push(state.selectedSeries.title);
   const crumbText = crumb.length > 0 ? crumb.join(' › ') : 'catalogue';
   const title = `anime1 — ${crumbText}${state.filter ? `  [filter: "${state.filter}"]` : ''}${ctx.message ? `  ${ctx.message}` : ''}`;
-  rows.push({ text: truncateToWidth(title, width) });
+  rows.push({ text: padOrTruncate(title, width), style: 'title' });
   rows.push({ text: '─'.repeat(width) });
 
   // Column header row: only the active column's header is highlighted (plus ▸).
@@ -190,7 +192,7 @@ export function renderBrowse(ctx: RenderContext): ScreenRow[] {
   // Queue panel.
   if (ctx.jobs && ctx.jobs.length > 0) {
     rows.push({ text: '─'.repeat(width) });
-    rows.push({ text: `Downloads (${ctx.jobs.length})` });
+    rows.push({ text: `Downloads (${ctx.jobs.length})`, style: 'dim' });
     for (const job of ctx.jobs.slice(0, 8)) {
       const icon = job.status === 'queued' ? '○' : job.status === 'downloading' ? '↓' : job.status === 'done' ? '✓' : '✗';
       const progress =
@@ -202,7 +204,7 @@ export function renderBrowse(ctx: RenderContext): ScreenRow[] {
               ? renderProgress(job.progress.received, job.progress.total)
               : 'queued';
       const line = `${icon} ${job.seriesTitle} — ${job.episode.title}  ${progress}`;
-      rows.push({ text: truncateToWidth(line, width) });
+      rows.push({ text: truncateToWidth(line, width), style: 'dim' });
     }
   }
 
@@ -211,7 +213,7 @@ export function renderBrowse(ctx: RenderContext): ScreenRow[] {
     `←/→ move  ↑/↓ select  PgUp/PgDn page  Home/End jump  Enter drill/select  ` +
     `Space toggle  a all/none  Backspace back  d queue${picked > 0 ? ` (${picked})` : ''}  Tab downloads  q quit`;
   rows.push({ text: '─'.repeat(width) });
-  rows.push({ text: truncateToWidth(footer, width) });
+  rows.push({ text: padOrTruncate(footer, width), style: 'footer' });
   return rows;
 }
 
@@ -222,11 +224,11 @@ function renderQueueView(ctx: RenderContext): ScreenRow[] {
   const pageHeight = Math.max(3, Math.floor(height) - 4); // title + sep + footer sep + footer
   const win = windowSlice(jobs, queueCursor, pageHeight);
   const marks = jobs.length > pageHeight ? `${win.start > 0 ? '▲' : ''}${win.end < jobs.length ? '▼' : ''}` : '';
-  rows.push({ text: truncateToWidth(`anime1 — Downloads (${jobs.length})${marks}`, width) });
+  rows.push({ text: padOrTruncate(`anime1 — Downloads (${jobs.length})${marks}`, width), style: 'title' });
   rows.push({ text: '─'.repeat(width) });
 
   if (jobs.length === 0) {
-    rows.push({ text: 'Queue is empty. Press Tab to browse and queue downloads.' });
+    rows.push({ text: padOrTruncate('Queue is empty. Press Tab to browse and queue downloads.', width), style: 'dim' });
   } else {
     for (let r = 0; r < win.visible.length; r++) {
       const job = win.visible[r];
@@ -246,7 +248,7 @@ function renderQueueView(ctx: RenderContext): ScreenRow[] {
   }
 
   rows.push({ text: '─'.repeat(width) });
-  rows.push({ text: truncateToWidth('↑/↓ move  x cancel (aborts a downloading job)  Tab browse  q quit', width) });
+  rows.push({ text: padOrTruncate('↑/↓ move  x cancel (aborts a downloading job)  Tab browse  q quit', width), style: 'footer' });
   return rows;
 }
 

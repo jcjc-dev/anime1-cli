@@ -223,3 +223,14 @@ describe('queue view', () => {
     expect(rows.map((r) => r.text).join('\n')).toContain('Queue is empty');
   });
 });
+
+describe('styled title bar', () => {
+  it('renders the breadcrumb as a full-width styled bar', () => {
+    const rows = renderBrowse(ctx(toEpisodes(), 24, 100));
+    const title = rows[0];
+    expect(title.style).toBe('title');
+    expect(title.text).toContain('2025 › 夏 Summer › Alpha');
+    // Padded to the full width so the colored bar spans the whole line.
+    expect(displayWidth(title.text)).toBe(100);
+  });
+});

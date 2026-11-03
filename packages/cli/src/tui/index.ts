@@ -46,6 +46,14 @@ export interface TuiResult {
 const ESC = '\x1b';
 const REVERSE = `${ESC}[7m`;
 const RESET = `${ESC}[0m`;
+const BOLD = `${ESC}[1m`;
+const DIM = `${ESC}[2m`;
+const TITLE_STYLE = `${BOLD}${ESC}[37;44m`; // bold white on blue
+const STYLE: Record<'title' | 'footer' | 'dim', string> = {
+  title: TITLE_STYLE,
+  footer: DIM,
+  dim: DIM,
+};
 const ALT_ON = `${ESC}[?1049h`; // enter alternate screen buffer
 const ALT_OFF = `${ESC}[?1049l`; // leave alternate screen buffer
 const DRAW_INTERVAL_MS = 120;
@@ -101,24 +109,27 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
       // line never leaves stale characters), then clear any leftover rows below.
       process.stdout.write(`${ESC}[H`);
       for (const row of rows) {
-        process.stdout.write(renderRow(row) + `${ESC}[K\n`);
+        // Clear each line BEFORE writing it (cursor to column 1, erase whole line),
+        // then write the row — this removes stale content without erasing the new.
+        process.stdout.write(`${ESC}[G${ESC}[2K` + renderRow(row) + '\n');
       }
       process.stdout.write(`${ESC}[J`);
     };
 
     /**
-     * Applies reverse-video only to the row's highlighted ranges (the selected
-     * cell), never the whole line.
+     * Applies the row's style (title/footer/dim colors) and reverse-video only on
+     * its highlighted ranges (the selected cell), never the whole line.
      */
     function renderRow(row: ScreenRow): string {
-      if (!row.ranges || row.ranges.length === 0) return row.text;
-      let out = '';
+      const open = row.style ? STYLE[row.style] : '';
+      if (!row.ranges || row.ranges.length === 0) return open + row.text + RESET;
+      let out = open;
       let last = 0;
       for (const range of row.ranges) {
-        out += row.text.slice(last, range.start) + REVERSE + row.text.slice(range.start, range.end) + RESET;
+        out += row.text.slice(last, range.start) + REVERSE + row.text.slice(range.start, range.end) + RESET + open;
         last = range.end;
       }
-      return out + row.text.slice(last);
+      return out + row.text.slice(last) + RESET;
     }
 
     /** Coalesces rapid queue updates into at most one redraw per interval. */
