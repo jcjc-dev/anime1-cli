@@ -114,7 +114,10 @@ the active column is marked with `▸`, and the highlight follows only the selec
 cell (column × row), never the whole line. Long lists scroll within the terminal
 (`↑/↓` to move, `PgUp/PgDn` to page, `Home/End` to jump, `▲/▼` in a column header
 show which way more items are). On the episodes pane, `Space` toggles one episode
-and `a` selects / unselects all of them. **Tab** switches to a separate
+and `a` selects / unselects all of them. Episode lists are cached for 5 minutes,
+so re-entering a series doesn't re-fetch; press `r` to force a reload — for the
+current series' episodes on the episodes pane, or for the whole catalogue on any
+other pane. **Tab** switches to a separate
 **Downloads** view — a full queue listing (status, progress, series, output
 dir) with its own cursor where you can move with `↑/↓`, cancel a job with `x`
 (including one that is currently downloading — any partial files are removed

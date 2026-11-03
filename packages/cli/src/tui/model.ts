@@ -49,6 +49,48 @@ export interface BrowseState {
   outDir: string;
 }
 
+/**
+ * Rebuilds the browse panes from a freshly fetched catalogue, keeping the
+ * current year/season/series selections where they still exist. Used by the
+ * 'r' reload on the series (and higher) panes to pick up newly-added series.
+ */
+export function replaceCatalog(state: BrowseState, catalog: Anime[]): BrowseState {
+  const years = listYears(catalog);
+  const selectedYear =
+    state.selectedYear && years.includes(state.selectedYear) ? state.selectedYear : (years[0] ?? null);
+  const seasons = selectedYear ? listSeasons(catalog, selectedYear) : [];
+  const selectedSeason =
+    state.selectedSeason && seasons.includes(state.selectedSeason) ? state.selectedSeason : (seasons[0] ?? null);
+  const seriesAll = selectedYear && selectedSeason ? filterByYearSeason(catalog, selectedYear, selectedSeason) : [];
+  const series = state.filter ? searchByTitle(seriesAll, state.filter) : seriesAll;
+  const selectedSeries =
+    state.selectedSeries && series.some((a) => a.catId === state.selectedSeries?.catId)
+      ? (series.find((a) => a.catId === state.selectedSeries?.catId) ?? null)
+      : (series[0] ?? null);
+  const yearCursor = Math.max(0, years.indexOf(selectedYear ?? ''));
+  const seasonCursor = Math.max(0, seasons.indexOf(selectedSeason ?? ''));
+  const seriesCursor = Math.max(0, series.findIndex((a) => a.catId === selectedSeries?.catId));
+  return {
+    ...state,
+    catalog,
+    years,
+    seasons,
+    seriesAll,
+    series,
+    selectedYear,
+    selectedSeason,
+    selectedSeries,
+    yearCursor,
+    seasonCursor,
+    seriesCursor,
+    episodes: [],
+    episodeCursor: 0,
+    episodesLoading: false,
+    episodesError: null,
+    selectedEpisodeIndexes: new Set(),
+  };
+}
+
 export function createBrowseState(catalog: Anime[], outDir: string): BrowseState {
   // The cursor implies selection: the first item of each pane is selected from
   // the start, so the panes are populated immediately from the in-memory catalog.

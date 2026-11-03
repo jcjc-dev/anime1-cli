@@ -12,6 +12,7 @@ import {
   pageDown,
   pageUp,
   queueDownload,
+  replaceCatalog,
   setEpisodes,
   toggleEpisode,
   toggleSelectAll,
@@ -280,5 +281,32 @@ describe('toggleSelectAll', () => {
     const all = toggleSelectAll(state).state;
     const next = toggleSelectAll(all).state;
     expect(next.selectedEpisodeIndexes.size).toBe(0);
+  });
+});
+
+describe('replaceCatalog', () => {
+  it('keeps selections that still exist and resets episodes', () => {
+    const s = createBrowseState(catalog, './x'); // 2025 / 夏 / Alpha selected
+    const newCatalog = catalog.filter((a) => a.title !== 'Alpha');
+    const next = replaceCatalog(s, newCatalog);
+    expect(next.catalog).toBe(newCatalog);
+    expect(next.selectedYear).toBe('2025');
+    expect(next.selectedSeason).toBe('夏');
+    expect(next.series.map((a) => a.title)).toEqual(['Beta']);
+    expect(next.selectedSeries?.title).toBe('Beta'); // falls back to first
+    expect(next.episodes).toEqual([]);
+    expect(next.episodesLoading).toBe(false);
+  });
+
+  it('keeps the selected series when it still exists', () => {
+    const s = createBrowseState(catalog, './x');
+    const next = replaceCatalog(s, catalog);
+    expect(next.selectedSeries?.title).toBe('Alpha');
+  });
+
+  it('drops a selection that no longer exists in the refreshed catalogue', () => {
+    const s = createBrowseState(catalog, './x');
+    const empty = replaceCatalog(s, catalog.filter((a) => a.title !== 'Alpha' && a.title !== 'Beta'));
+    expect(empty.selectedSeries?.title).toBe('Gamma'); // 2025 winter fallback
   });
 });

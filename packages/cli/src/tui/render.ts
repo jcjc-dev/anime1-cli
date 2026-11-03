@@ -211,7 +211,7 @@ export function renderBrowse(ctx: RenderContext): ScreenRow[] {
   const picked = selectedCount(state);
   const footer =
     `←/→ move  ↑/↓ select  PgUp/PgDn page  Home/End jump  Enter drill/select  ` +
-    `Space toggle  a all/none  Backspace back  d queue${picked > 0 ? ` (${picked})` : ''}  Tab downloads  q quit`;
+    `Space toggle  a all/none  r reload  Backspace back  d queue${picked > 0 ? ` (${picked})` : ''}  Tab downloads  q quit`;
   rows.push({ text: '─'.repeat(width) });
   rows.push({ text: padOrTruncate(footer, width), style: 'footer' });
   return rows;

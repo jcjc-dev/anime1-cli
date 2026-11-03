@@ -4,8 +4,8 @@
 // logic lives in model.ts / render.ts / downloader.ts (which are unit-tested).
 
 import { emitKeypressEvents } from 'node:readline';
-import type { Anime, NetOptions } from 'anime1-core';
-import { fetchEpisodes, sanitizeFilename } from 'anime1-core';
+import type { Anime, Episode, NetOptions } from 'anime1-core';
+import { fetchCatalog, fetchEpisodes, sanitizeFilename } from 'anime1-core';
 import { resolveSeriesDir } from '../args.js';
 import { DownloadQueue } from '../downloader.js';
 import {
@@ -21,6 +21,7 @@ import {
   pageDown,
   pageUp,
   queueDownload,
+  replaceCatalog,
   setEpisodes,
   toggleEpisode,
   toggleSelectAll,
@@ -57,6 +58,7 @@ const STYLE: Record<'title' | 'footer' | 'dim', string> = {
 const ALT_ON = `${ESC}[?1049h`; // enter alternate screen buffer
 const ALT_OFF = `${ESC}[?1049l`; // leave alternate screen buffer
 const DRAW_INTERVAL_MS = 120;
+const EPISODE_TTL_MS = 5 * 60 * 1000; // keep episode lists fresh for 5 minutes
 
 function clamp(index: number, length: number): number {
   if (length <= 0) return 0;
@@ -81,6 +83,9 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
     let queueCursor = 0;
     let lastDraw = 0;
     let pendingDraw: ReturnType<typeof setTimeout> | null = null;
+
+    // Episode cache keyed by series catId, so re-entering a pane doesn't re-fetch.
+    const episodeCache = new Map<number, { episodes: Episode[]; at: number }>();
 
     const queue = new DownloadQueue({
       net: options.net,
@@ -255,6 +260,13 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
           step = state.active === 2 && state.filter.length > 0 ? backspaceFilter(state) : moveLeft(state);
           break;
         default:
+          if (key.name === 'r') {
+            // On episodes: force-reload that series' episodes. Elsewhere: reload
+            // the catalogue (refreshes the series lists).
+            if (state.active === 3 && state.selectedSeries) void startLoad(state.selectedSeries, true);
+            else void reloadCatalog();
+            return;
+          }
           if (key.name === 'd' && state.active === 3) step = queueDownload(state);
           else if (key.name === 'a' && state.active === 3) step = toggleSelectAll(state);
           else if (str && str.length === 1 && str.codePointAt(0)! >= 32 && str !== '\x7f') {
@@ -279,17 +291,39 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
       draw();
     };
 
-    const startLoad = async (series: Anime): Promise<void> => {
+    const startLoad = async (series: Anime, force = false): Promise<void> => {
       const token = ++loadToken;
+      const cached = episodeCache.get(series.catId);
+      if (!force && cached && Date.now() - cached.at < EPISODE_TTL_MS) {
+        state = setEpisodes(beginEpisodeLoad(state, series), cached.episodes, null);
+        if (!finishing) draw();
+        return;
+      }
       state = beginEpisodeLoad(state, series);
       draw();
       try {
         const episodes = await fetchEpisodes(series.catId, options.net);
         if (token !== loadToken) return;
+        episodeCache.set(series.catId, { episodes, at: Date.now() });
         state = setEpisodes(state, episodes, null);
       } catch (err) {
         if (token !== loadToken) return;
         state = setEpisodes(state, [], err instanceof Error ? err.message : String(err));
+      }
+      if (!finishing) draw();
+    };
+
+    /** Re-fetches the catalogue to refresh the series lists (the 'r' reload). */
+    const reloadCatalog = async (): Promise<void> => {
+      message = 'Reloading catalogue...';
+      draw();
+      try {
+        const catalog = await fetchCatalog(options.net);
+        episodeCache.clear(); // series may have changed
+        state = replaceCatalog(state, catalog);
+        message = 'Catalogue reloaded.';
+      } catch (err) {
+        message = `Catalogue reload failed: ${err instanceof Error ? err.message : String(err)}`;
       }
       if (!finishing) draw();
     };
