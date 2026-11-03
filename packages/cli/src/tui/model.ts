@@ -183,36 +183,52 @@ function moveInSeries(state: BrowseState, delta: number): Step {
   };
 }
 
-export function moveUp(state: BrowseState): Step {
+/**
+ * Moves the active pane's cursor by `delta` items (negative = up). For the
+ * browse panes the selection follows and child panes are re-derived; for the
+ * episode pane only the cursor moves.
+ */
+function moveBy(state: BrowseState, delta: number): Step {
   switch (state.active) {
     case 0:
-      return moveInYear(state, -1);
+      return moveInYear(state, delta);
     case 1:
-      return moveInSeason(state, -1);
+      return moveInSeason(state, delta);
     case 2:
-      return moveInSeries(state, -1);
+      return moveInSeries(state, delta);
     default:
       return {
-        state: { ...state, episodeCursor: clamp(state.episodeCursor - 1, state.episodes.length) },
+        state: { ...state, episodeCursor: clamp(state.episodeCursor + delta, state.episodes.length) },
         action: { type: 'none' },
       };
   }
 }
 
+export function moveUp(state: BrowseState): Step {
+  return moveBy(state, -1);
+}
+
 export function moveDown(state: BrowseState): Step {
-  switch (state.active) {
-    case 0:
-      return moveInYear(state, 1);
-    case 1:
-      return moveInSeason(state, 1);
-    case 2:
-      return moveInSeries(state, 1);
-    default:
-      return {
-        state: { ...state, episodeCursor: clamp(state.episodeCursor + 1, state.episodes.length) },
-        action: { type: 'none' },
-      };
-  }
+  return moveBy(state, 1);
+}
+
+/** Moves the active pane cursor by roughly a page (for PgUp/PgDn). */
+export function pageUp(state: BrowseState, pageSize: number): Step {
+  return moveBy(state, -Math.max(1, Math.floor(pageSize)));
+}
+
+export function pageDown(state: BrowseState, pageSize: number): Step {
+  return moveBy(state, Math.max(1, Math.floor(pageSize)));
+}
+
+/** Jumps to the first item of the active pane. */
+export function goHome(state: BrowseState): Step {
+  return moveBy(state, -1e9);
+}
+
+/** Jumps to the last item of the active pane. */
+export function goEnd(state: BrowseState): Step {
+  return moveBy(state, 1e9);
 }
 
 /**

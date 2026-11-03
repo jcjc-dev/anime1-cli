@@ -4,9 +4,13 @@ import {
   backspaceFilter,
   confirmDownload,
   createBrowseState,
+  goEnd,
+  goHome,
   moveDown,
   moveLeft,
   moveRight,
+  pageDown,
+  pageUp,
   queueDownload,
   setEpisodes,
   toggleEpisode,
@@ -227,5 +231,31 @@ describe('queueDownload', () => {
     const s = createBrowseState(catalog, './x');
     const step = queueDownload(s);
     expect(step.action.type).toBe('none');
+  });
+});
+
+describe('paging and jumping', () => {
+  it('Home/End jump to the first/last item of the active pane', () => {
+    let s = createBrowseState(catalog, './x'); // years: 2025, 2024, cursor 0
+    expect(goEnd(s).state.selectedYear).toBe('2024');
+    expect(goEnd(s).state.yearCursor).toBe(1);
+    const back = goEnd(s).state;
+    expect(goHome(back).state.yearCursor).toBe(0);
+    expect(goHome(back).state.selectedYear).toBe('2025');
+  });
+
+  it('PgDn/PgUp move the cursor by a page, clamped to bounds', () => {
+    let s = createBrowseState(catalog, './x');
+    s = moveRight(s).state; // seasons
+    s = moveRight(s).state; // series pane, series = [Alpha, Beta], cursor 0
+    expect(pageDown(s, 5).state.seriesCursor).toBe(1);
+    expect(pageUp(s, 5).state.seriesCursor).toBe(0);
+  });
+
+  it('PgUp at the top stays at the top', () => {
+    let s = createBrowseState(catalog, './x');
+    s = moveRight(s).state;
+    s = moveRight(s).state;
+    expect(pageUp(s, 3).state.seriesCursor).toBe(0);
   });
 });

@@ -1,6 +1,8 @@
 // Pure column renderer for the TUI. Produces plain-text screen rows; the shell
-// applies ANSI styling (inverting the active cursor row) when drawing. No I/O,
-// so the layout is fully unit-testable.
+// applies ANSI styling (inverting highlighted rows) when drawing. Height-aware:
+// each pane is a scrollable viewport whose window tracks the cursor, so long
+// lists never overflow the terminal. A breadcrumb in the title and a highlighted
+// active column make it obvious which section you are in. No I/O.
 
 import type { Anime, Episode } from 'anime1-core';
 import { SEASON_EN } from 'anime1-core';
@@ -11,23 +13,17 @@ import type { BrowseState, PaneKind } from './model.js';
 export interface RenderContext {
   state: BrowseState;
   width: number;
-  /** Transient status line shown at the top (e.g. a download notice). */
+  height: number;
+  /** Transient status line shown in the title (e.g. a download notice). */
   message?: string;
   /** Live download-queue snapshot to render in a bottom panel. */
   jobs?: Job[];
 }
 
-const JOB_ICON: Record<Job['status'], string> = {
-  queued: '○',
-  downloading: '↓',
-  done: '✓',
-  error: '✗',
-};
-
 export interface ScreenRow {
   text: string;
-  /** True when this row is the active cursor row and should be highlighted. */
-  highlight: boolean;
+  /** Highlighted (inverted) when it is the active column's header or cursor. */
+  highlight?: boolean;
 }
 
 const PANE_HEADERS: Record<PaneKind, string> = {
@@ -39,42 +35,41 @@ const PANE_HEADERS: Record<PaneKind, string> = {
 
 const SPACING = 2;
 
+/**
+ * How many item rows fit in the browse area for a given terminal height and
+ * queue-panel size. Shared with the shell so PgUp/PgDn page by the same amount.
+ */
+export function computePageHeight(height: number, jobCount: number): number {
+  const topReserved = 3; // title + separator + column header
+  const bottomReserved = 2; // separator + footer
+  const queueRows = jobCount > 0 ? Math.min(jobCount, 8) + 2 : 0;
+  return Math.max(3, Math.floor(height) - topReserved - bottomReserved - queueRows);
+}
+
 function padOrTruncate(text: string, width: number): string {
   const w = displayWidth(text);
   if (w <= width) return text + ' '.repeat(width - w);
   return truncateToWidth(text, width);
 }
 
-interface Cell {
-  text: string;
-  highlight: boolean;
-}
-
-function paneColumn(
-  kind: PaneKind,
-  lines: string[],
+/** Computes a centered window of `pageHeight` items around the cursor. */
+function windowSlice<T>(
+  items: T[],
   cursor: number,
-  isActive: boolean,
-  width: number,
-): Cell[] {
-  const cells: Cell[] = [{ text: padOrTruncate(PANE_HEADERS[kind], width), highlight: false }];
-  if (lines.length === 0) {
-    cells.push({ text: padOrTruncate('—', width), highlight: false });
-    return cells;
-  }
-  for (let i = 0; i < lines.length; i++) {
-    cells.push({
-      text: padOrTruncate(lines[i], width),
-      highlight: isActive && i === cursor,
-    });
-  }
-  return cells;
+  pageHeight: number,
+): { start: number; end: number; visible: T[] } {
+  if (items.length === 0) return { start: 0, end: 0, visible: [] };
+  const start = Math.max(
+    0,
+    Math.min(cursor - Math.floor(pageHeight / 2), Math.max(0, items.length - pageHeight)),
+  );
+  const end = Math.min(items.length, start + pageHeight);
+  return { start, end, visible: items.slice(start, end) };
 }
 
 function episodeLines(state: BrowseState): string[] {
   if (state.episodesLoading) return ['(loading…)'];
   if (state.episodesError) return [`(error: ${state.episodesError})`];
-  if (state.episodes.length === 0) return [];
   return state.episodes.map(
     (episode, i) => `${state.selectedEpisodeIndexes.has(i) ? '[x]' : '[ ]'} ${episode.title}`,
   );
@@ -88,80 +83,113 @@ function selectedCount(state: BrowseState): number {
   return state.selectedEpisodeIndexes.size;
 }
 
+/** A per-column cell at a given browse row (empty when out of range). */
+interface Cell {
+  text: string;
+  highlight: boolean;
+}
+
+function cellAt(
+  window: { start: number; end: number; visible: string[] },
+  row: number,
+  cursor: number,
+  isActive: boolean,
+  width: number,
+): Cell {
+  const item = window.visible[row];
+  if (item === undefined) return { text: '', highlight: false };
+  return {
+    text: padOrTruncate(item, width),
+    highlight: isActive && window.start + row === cursor,
+  };
+}
+
+function scrollMarkers(window: { start: number; end: number }, length: number): string {
+  const above = window.start > 0 ? '▲' : '';
+  const below = window.end < length ? '▼' : '';
+  return `${above}${below}`;
+}
+
 /** Renders the browse view into screen rows (plain text, no ANSI). */
 export function renderBrowse(ctx: RenderContext): ScreenRow[] {
   const { state, width } = ctx;
   const colWidth = Math.max(8, Math.floor((width - SPACING * (4 - 1)) / 4));
+  const pageHeight = computePageHeight(ctx.height, ctx.jobs?.length ?? 0);
 
-  const years = paneColumn(
-    'years',
-    state.years.map((year) => (year === state.selectedYear ? `› ${year}` : year)),
-    state.yearCursor,
-    state.active === 0,
-    colWidth,
-  );
-  const seasons = paneColumn(
-    'seasons',
-    state.seasons.map((season) => `${season} ${SEASON_EN[season] ?? ''}`.trim()),
-    state.seasonCursor,
-    state.active === 1,
-    colWidth,
-  );
-  const series = paneColumn('series', seriesLines(state), state.seriesCursor, state.active === 2, colWidth);
-  const episodes = paneColumn(
-    'episodes',
-    episodeLines(state),
-    state.episodeCursor,
-    state.active === 3,
-    colWidth,
-  );
+  const years = state.years.map((year) => (year === state.selectedYear ? `› ${year}` : year));
+  const seasons = state.seasons.map((season) => `${season} ${SEASON_EN[season] ?? ''}`.trim());
+  const series = seriesLines(state);
+  const episodes = episodeLines(state);
 
-  const columns = [years, seasons, series, episodes];
-  const height = Math.max(...columns.map((column) => column.length));
+  const windows = [
+    windowSlice(years, state.yearCursor, pageHeight),
+    windowSlice(seasons, state.seasonCursor, pageHeight),
+    windowSlice(series, state.seriesCursor, pageHeight),
+    windowSlice(episodes, state.episodeCursor, pageHeight),
+  ];
+  const cursors = [state.yearCursor, state.seasonCursor, state.seriesCursor, state.episodeCursor];
+  const activeColumn = state.active;
 
   const rows: ScreenRow[] = [];
-  const title = `anime1  —  ${state.filter ? `filter: "${state.filter}"  ` : ''}${ctx.message ?? ''}`.trimEnd();
-  rows.push({ text: title, highlight: false });
-  rows.push({ text: '─'.repeat(width), highlight: false });
 
-  for (let r = 0; r < height; r++) {
-    let text = '';
-    let highlight = false;
-    for (const column of columns) {
-      const cell = column[r] ?? { text: '', highlight: false };
-      text += cell.text;
-      if (cell.highlight) highlight = true;
-    }
-    rows.push({ text, highlight });
+  // Title + breadcrumb: makes the current section obvious.
+  const crumb: string[] = [];
+  if (state.selectedYear) crumb.push(state.selectedYear);
+  if (state.selectedSeason) crumb.push(`${state.selectedSeason} ${SEASON_EN[state.selectedSeason] ?? ''}`.trim());
+  if (state.selectedSeries) crumb.push(state.selectedSeries.title);
+  const crumbText = crumb.length > 0 ? crumb.join(' › ') : 'catalogue';
+  const title = `anime1 — ${crumbText}${state.filter ? `  [filter: "${state.filter}"]` : ''}${ctx.message ? `  ${ctx.message}` : ''}`;
+  rows.push({ text: truncateToWidth(title, width) });
+  rows.push({ text: '─'.repeat(width) });
+
+  // Column header row: the active column is marked with ▸ and highlighted;
+  // ▲/▼ show whether that column can scroll further up/down.
+  const lengths = [years.length, seasons.length, series.length, episodes.length];
+  const headerCells = (['years', 'seasons', 'series', 'episodes'] as PaneKind[]).map((kind, i) => {
+    const label = `${i === activeColumn ? '▸ ' : ''}${PANE_HEADERS[kind]}${scrollMarkers(windows[i], lengths[i])}`;
+    return padOrTruncate(label, colWidth);
+  });
+  rows.push({ text: headerCells.join(''), highlight: true });
+
+  // Item rows: each pane is a scrollable viewport window.
+  for (let r = 0; r < pageHeight; r++) {
+    const cells = (['years', 'seasons', 'series', 'episodes'] as PaneKind[]).map((_, i) =>
+      cellAt(windows[i], r, cursors[i], i === activeColumn, colWidth),
+    );
+    const text = cells.map((c) => c.text).join('');
+    const highlight = cells.some((c) => c.highlight);
+    rows.push({ text, highlight: highlight || undefined });
   }
 
+  // Queue panel.
   if (ctx.jobs && ctx.jobs.length > 0) {
-    rows.push({ text: '─'.repeat(width), highlight: false });
-    rows.push({ text: `Downloads (${ctx.jobs.length})`, highlight: false });
+    rows.push({ text: '─'.repeat(width) });
+    rows.push({ text: `Downloads (${ctx.jobs.length})` });
     for (const job of ctx.jobs.slice(0, 8)) {
-      const status = JOB_ICON[job.status];
+      const icon = job.status === 'queued' ? '○' : job.status === 'downloading' ? '↓' : job.status === 'done' ? '✓' : '✗';
       const progress =
         job.status === 'done'
           ? 'done'
           : job.status === 'error'
-            ? job.error ?? 'failed'
+            ? (job.error ?? 'failed')
             : job.status === 'downloading'
               ? renderProgress(job.progress.received, job.progress.total)
               : 'queued';
-      const line = `${status} ${job.seriesTitle} — ${job.episode.title}  ${progress}`;
-      rows.push({ text: truncateToWidth(line, width), highlight: false });
+      const line = `${icon} ${job.seriesTitle} — ${job.episode.title}  ${progress}`;
+      rows.push({ text: truncateToWidth(line, width) });
     }
   }
 
   const picked = selectedCount(state);
   const footer =
-    `←/→ move  ↑/↓ select  Enter drill/select  Space toggle  Backspace back  ` +
-    `d queue${picked > 0 ? ` (${picked})` : ''}  q quit  —  ${state.outDir}`;
-  rows.push({ text: '─'.repeat(width), highlight: false });
-  rows.push({ text: truncateToWidth(footer, width), highlight: false });
+    `←/→ move  ↑/↓ select  PgUp/PgDn page  Home/End jump  Enter drill/select  ` +
+    `Space toggle  Backspace back  d queue${picked > 0 ? ` (${picked})` : ''}  q quit`;
+  rows.push({ text: '─'.repeat(width) });
+  rows.push({ text: truncateToWidth(footer, width) });
   return rows;
 }
 
+/** Returns the item under the active pane's cursor (used by the shell). */
 export function seriesTitle(series: Anime): string {
   return `${series.title}  (${series.episodes})`;
 }

@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { Anime, Episode } from 'anime1-core';
 import {
   createBrowseState,
+  goEnd,
   moveRight,
   setEpisodes,
   toggleEpisode,
 } from '../src/tui/model.js';
-import { renderBrowse } from '../src/tui/render.js';
+import { computePageHeight, renderBrowse } from '../src/tui/render.js';
 
 const anime = (catId: number, title: string, year: string, season: string): Anime => ({
   catId,
@@ -28,58 +29,98 @@ const eps: Episode[] = [
 
 function toEpisodes() {
   let s = createBrowseState(catalog, './downloads');
-  s = moveRight(s).state; // seasons
-  s = moveRight(s).state; // series
-  s = moveRight(s).state; // episodes
+  s = moveRight(s).state;
+  s = moveRight(s).state;
+  s = moveRight(s).state;
   return setEpisodes(s, eps, null);
 }
 
+function textOf(rows: Array<{ text: string }>): string {
+  return rows.map((r) => r.text).join('\n');
+}
+
+function ctx(
+  state: ReturnType<typeof createBrowseState>,
+  height = 24,
+  width = 120,
+): { state: ReturnType<typeof createBrowseState>; width: number; height: number } {
+  return { state, width, height };
+}
+
+describe('computePageHeight', () => {
+  it('reserves rows for chrome and the queue panel', () => {
+    expect(computePageHeight(24, 0)).toBe(19);
+    expect(computePageHeight(24, 3)).toBeLessThan(19);
+    expect(computePageHeight(10, 0)).toBeGreaterThanOrEqual(3);
+  });
+});
+
 describe('renderBrowse', () => {
   it('renders pane headers and the footer', () => {
-    const rows = renderBrowse({ state: createBrowseState(catalog, './downloads'), width: 120 });
-    const text = rows.map((r) => r.text).join('\n');
+    const rows = renderBrowse(ctx(createBrowseState(catalog, './downloads')));
+    const text = textOf(rows);
     expect(text).toContain('Years');
     expect(text).toContain('Seasons');
     expect(text).toContain('Series');
     expect(text).toContain('Episodes');
-    expect(text).toContain('./downloads');
+    expect(text).toContain('PgUp/PgDn');
   });
 
-  it('highlights exactly the active cursor row', () => {
-    const rows = renderBrowse({ state: createBrowseState(catalog, './downloads'), width: 120 });
-    const highlighted = rows.filter((r) => r.highlight);
-    expect(highlighted).toHaveLength(1);
-    expect(highlighted[0].text).toContain('2025');
+  it('shows a breadcrumb of the current section', () => {
+    const rows = renderBrowse(ctx(toEpisodes()));
+    const text = textOf(rows);
+    expect(text).toContain('2025 › 夏 Summer › Alpha');
   });
 
-  it('shows the selected year with a marker', () => {
-    // The first year (2025) is pre-selected on startup.
-    const state = createBrowseState(catalog, './downloads');
-    const rows = renderBrowse({ state, width: 120 });
-    expect(rows.map((r) => r.text).join('\n')).toContain('› 2025');
+  it('marks the active column header with a pointer and highlights it', () => {
+    const rows = renderBrowse(ctx(createBrowseState(catalog, './downloads')));
+    expect(textOf(rows)).toContain('▸ Years');
+    const header = rows.find((r) => r.text.startsWith('▸'));
+    expect(header?.highlight).toBe(true);
+  });
+
+  it('highlights exactly one item row (the active cursor)', () => {
+    const rows = renderBrowse(ctx(createBrowseState(catalog, './downloads')));
+    const itemHighlights = rows.filter((r) => r.highlight && !r.text.startsWith('▸')).length;
+    expect(itemHighlights).toBe(1);
+    const cursor = rows.find((r) => r.highlight && !r.text.startsWith('▸'));
+    expect(cursor?.text).toContain('2025');
   });
 
   it('marks selected episodes with [x]', () => {
     let state = toEpisodes();
     state = toggleEpisode(state, 0).state;
-    const rows = renderBrowse({ state, width: 160 });
-    const text = rows.map((r) => r.text).join('\n');
+    const text = textOf(renderBrowse(ctx(state)));
     expect(text).toContain('[x] Alpha [1]');
     expect(text).toContain('[ ] Alpha [2]');
   });
 
+  it('windows a long list and shows scroll markers', () => {
+    // 40 series in one year+season.
+    const big: Anime[] = Array.from({ length: 40 }, (_, i) => anime(i + 1, `Series ${String(i + 1).padStart(2, '0')}`, '2025', '夏'));
+    let s = createBrowseState(big, './downloads');
+    s = moveRight(s).state; // seasons
+    s = moveRight(s).state; // series pane (active 2), cursor 0
+    const top = renderBrowse(ctx(s, 24, 120));
+    const topText = textOf(top);
+    // Not every series fits; a scroll-down marker appears.
+    expect(topText).not.toContain('Series 40');
+    expect(topText).toContain('▼');
+    // Moving to the end scrolls the window down and shows an up marker.
+    const bottom = renderBrowse(ctx(goEnd(s).state, 24, 120));
+    const bottomText = textOf(bottom);
+    expect(bottomText).toContain('Series 40');
+    expect(bottomText).toContain('▲');
+  });
+
   it('shows a loading placeholder while episodes load', () => {
     const state = { ...toEpisodes(), episodesLoading: true, episodes: [] };
-    const rows = renderBrowse({ state, width: 160 });
-    expect(rows.map((r) => r.text).join('\n')).toContain('(loading…)');
+    expect(textOf(renderBrowse(ctx(state)))).toContain('(loading…)');
   });
 
   it('never produces rows wider than the requested width', () => {
-    const rows = renderBrowse({ state: toEpisodes(), width: 80 });
-    for (const row of rows) {
-      // Rows may contain ANSI-free plain text; strip nothing and just check length.
-      expect(row.text.length).toBeLessThanOrEqual(80);
-    }
+    const rows = renderBrowse(ctx(toEpisodes(), 24, 80));
+    for (const row of rows) expect(row.text.length).toBeLessThanOrEqual(80);
   });
 });
 
@@ -91,7 +132,7 @@ describe('renderBrowse queue panel', () => {
         id: 2,
         seriesTitle: 'Alpha',
         episode: { title: 'Alpha [2]', number: 2, apiReq: 'b' },
-        status: 'downloading',
+        status: 'downloading' as const,
         progress: { received: 512, total: 1024 },
         outDir: './downloads/Alpha',
       },
@@ -99,21 +140,20 @@ describe('renderBrowse queue panel', () => {
         id: 1,
         seriesTitle: 'Alpha',
         episode: { title: 'Alpha [1]', number: 1, apiReq: 'a' },
-        status: 'queued',
+        status: 'queued' as const,
         progress: { received: 0, total: null },
         outDir: './downloads/Alpha',
       },
     ];
-    const rows = renderBrowse({ state, width: 160, jobs });
-    const text = rows.map((r) => r.text).join('\n');
+    const rows = renderBrowse({ state, width: 160, height: 30, jobs });
+    const text = textOf(rows);
     expect(text).toContain('Downloads (2)');
     expect(text).toContain('Alpha — Alpha [2]');
     expect(text).toContain('Alpha — Alpha [1]');
   });
 
   it('omits the queue panel when there are no jobs', () => {
-    const rows = renderBrowse({ state: toEpisodes(), width: 160 });
-    const text = rows.map((r) => r.text).join('\n');
-    expect(text).not.toContain('Downloads (');
+    const rows = renderBrowse(ctx(toEpisodes()));
+    expect(textOf(rows)).not.toContain('Downloads (');
   });
 });

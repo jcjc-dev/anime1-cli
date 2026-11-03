@@ -12,17 +12,21 @@ import {
   backspaceFilter,
   beginEpisodeLoad,
   createBrowseState,
+  goEnd,
+  goHome,
   moveDown,
   moveLeft,
   moveRight,
   moveUp,
+  pageDown,
+  pageUp,
   queueDownload,
   setEpisodes,
   toggleEpisode,
   typeFilter,
 } from './model.js';
 import type { ActionResult, BrowseState } from './model.js';
-import { renderBrowse } from './render.js';
+import { computePageHeight, renderBrowse } from './render.js';
 
 export interface TuiOptions {
   net: NetOptions;
@@ -65,10 +69,12 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
     });
 
     const width = (): number => process.stdout.columns ?? 80;
+    const height = (): number => process.stdout.rows ?? 24;
+    const pageSize = (): number => computePageHeight(height(), queue.snapshot().length);
 
     const draw = (): void => {
       pendingDraw = null;
-      const rows = renderBrowse({ state, width: width(), message, jobs: queue.snapshot() });
+      const rows = renderBrowse({ state, width: width(), height: height(), message, jobs: queue.snapshot() });
       process.stdout.write(`${ESC}c${ESC}[?25l`);
       for (const row of rows) {
         const text = row.highlight ? `${REVERSE}${row.text}${RESET}` : row.text;
@@ -114,6 +120,18 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
           break;
         case 'down':
           step = moveDown(state);
+          break;
+        case 'pageup':
+          step = pageUp(state, pageSize());
+          break;
+        case 'pagedown':
+          step = pageDown(state, pageSize());
+          break;
+        case 'home':
+          step = goHome(state);
+          break;
+        case 'end':
+          step = goEnd(state);
           break;
         case 'left':
           step = moveLeft(state);
