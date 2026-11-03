@@ -8,6 +8,7 @@ import {
   toggleEpisode,
 } from '../src/tui/model.js';
 import { computePageHeight, renderBrowse } from '../src/tui/render.js';
+import { displayWidth } from '../src/ui.js';
 
 const anime = (catId: number, title: string, year: string, season: string): Anime => ({
   catId,
@@ -155,5 +156,23 @@ describe('renderBrowse queue panel', () => {
   it('omits the queue panel when there are no jobs', () => {
     const rows = renderBrowse(ctx(toEpisodes()));
     expect(textOf(rows)).not.toContain('Downloads (');
+  });
+});
+
+describe('column alignment', () => {
+  it('does not collapse shorter columns into later columns', () => {
+    let s = createBrowseState(catalog, './downloads'); // years: [2025, 2024], seasons: [夏, 冬]
+    s = moveRight(s).state; // seasons pane
+    s = moveRight(s).state; // series pane (active 2), cursor on Alpha
+    const rows = renderBrowse(ctx(s, 24, 120));
+    const colWidth = Math.max(8, Math.floor((120 - 6) / 4));
+    // 'Alpha' must sit in the Series column — past the Years and Seasons cells —
+    // not at the left edge under 'Years'.
+    const seriesRow = rows.find((r) => r.text.includes('Alpha  1-12'));
+    expect(seriesRow).toBeDefined();
+    // Measure by display width (columns), which is what the terminal actually
+    // aligns on — not raw string length, which miscounts 2-column glyphs like ›.
+    const col = seriesRow ? displayWidth(seriesRow.text.slice(0, seriesRow.text.indexOf('Alpha'))) : -1;
+    expect(col).toBeGreaterThanOrEqual(2 * colWidth);
   });
 });

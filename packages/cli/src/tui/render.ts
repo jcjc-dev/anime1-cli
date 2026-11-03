@@ -97,7 +97,12 @@ function cellAt(
   width: number,
 ): Cell {
   const item = window.visible[row];
-  if (item === undefined) return { text: '', highlight: false };
+  if (item === undefined) {
+    // Pad empty cells to the full column width so shorter columns never collapse
+    // and push later columns into their space (keeps each column aligned and
+    // paginating independently).
+    return { text: ' '.repeat(width), highlight: false };
+  }
   return {
     text: padOrTruncate(item, width),
     highlight: isActive && window.start + row === cursor,
