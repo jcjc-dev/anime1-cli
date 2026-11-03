@@ -108,6 +108,11 @@ anime1 --list --year 2026 --season spring
 | `--list` | Print the catalogue and exit |
 | `--extract` | Print video URLs and cookies, no download |
 | `--tui` | Open the columnar terminal browser: arrow keys move between panes, Enter drills in, backspace goes back; `d` queues a selection and downloads run in the background while you keep browsing |
+
+In the TUI the current section (year › season › series) is shown in the title,
+the active column is marked with `▸`, and long lists scroll within the terminal
+(`↑/↓` to move, `PgUp/PgDn` to page, `Home/End` to jump, `▲/▼` in a column header
+show which way more items are).
 | `--min-interval <ms>` | Smallest gap between requests (default 250) |
 | `--user-agent <ua>` | Custom User-Agent, if Cloudflare gets in the way |
 | `--cf-clearance <cookie>` | `cf_clearance` cookie, if Cloudflare gets in the way |
