@@ -30,6 +30,8 @@ export interface Job {
   error?: string;
   /** Resolved output directory for this series. */
   outDir: string;
+  /** Abort controller used to cancel an in-flight download. */
+  controller?: AbortController;
 }
 
 export interface QueueSummary {
@@ -63,8 +65,9 @@ async function defaultPerform(
   const base = pathResolve(job.outDir, sanitizeFilename(job.episode.title));
   const onProgress = (p: { received: number; total: number | null }): void =>
     report(p.received, p.total);
+  const signal = job.controller?.signal;
   if (source.isHls) {
-    await downloadHls(source, base, { net: ctx.net, connections: ctx.connections, onProgress });
+    await downloadHls(source, base, { net: ctx.net, connections: ctx.connections, onProgress, signal });
     return;
   }
   const outPath = `${base}.${extensionFromType(source.type)}`;
@@ -72,6 +75,7 @@ async function defaultPerform(
     net: ctx.net,
     connections: ctx.connections,
     onProgress,
+    signal,
   });
 }
 
@@ -103,14 +107,18 @@ export class DownloadQueue {
 
   /** Enqueues episodes (all belonging to one series) for download. */
   add(seriesTitle: string, episodes: Episode[], outDir: string): Job[] {
-    const created = episodes.map((episode) => ({
-      id: this.nextId++,
-      seriesTitle,
-      episode,
-      status: 'queued' as JobStatus,
-      progress: { received: 0, total: null } as QueueProgress,
-      outDir,
-    }));
+    const created = episodes.map((episode) => {
+      const controller = new AbortController();
+      return {
+        id: this.nextId++,
+        seriesTitle,
+        episode,
+        status: 'queued' as JobStatus,
+        progress: { received: 0, total: null } as QueueProgress,
+        outDir,
+        controller,
+      };
+    });
     this.jobs.push(...created);
     this.kick();
     return created;
@@ -122,13 +130,22 @@ export class DownloadQueue {
   }
 
   /**
-   * Removes a job from the queue. Mid-download jobs are left alone; queued and
-   * finished jobs can be dropped freely.
+   * Cancels a job. Queued and finished jobs are dropped; a job that is currently
+   * downloading is aborted (its partial files stay on disk for resume) and then
+   * removed from the list.
    */
-  remove(id: number): void {
+  cancel(id: number): void {
     const index = this.jobs.findIndex((job) => job.id === id);
     if (index === -1) return;
-    if (this.jobs[index].status === 'downloading') return;
+    const job = this.jobs[index];
+    if (job.status === 'downloading') {
+      job.controller?.abort();
+      this.jobs.splice(index, 1);
+      this.running = Math.max(0, this.running - 1);
+      this.options.onUpdate?.();
+      this.kick();
+      return;
+    }
     this.jobs.splice(index, 1);
     this.options.onUpdate?.();
   }
@@ -177,19 +194,21 @@ export class DownloadQueue {
     };
     this.options
       .perform!(job, report)
-      .then(() => {
-        job.status = 'done';
-        this.running--;
-        this.options.onUpdate?.();
-        this.kick();
-      })
-      .catch((err: unknown) => {
-        job.status = 'error';
-        job.error = err instanceof Error ? err.message : String(err);
-        this.running--;
-        this.options.onUpdate?.();
-        this.kick();
-      });
+      .then(() => this.finishJob(job, 'done', undefined))
+      .catch((err: unknown) => this.finishJob(job, 'error', err));
+  }
+
+  /**
+   * Records a finished job. Returns early (without touching counters) if the job
+   * was cancelled/removed in the meantime — its slot was already freed by cancel().
+   */
+  private finishJob(job: Job, status: JobStatus, err: unknown): void {
+    if (!this.jobs.includes(job)) return;
+    if (status === 'error') job.error = err instanceof Error ? err.message : String(err);
+    job.status = status;
+    this.running--;
+    this.options.onUpdate?.();
+    this.kick();
   }
 
   private maybeDrain(): void {

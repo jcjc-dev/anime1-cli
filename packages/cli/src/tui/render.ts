@@ -246,7 +246,7 @@ function renderQueueView(ctx: RenderContext): ScreenRow[] {
   }
 
   rows.push({ text: '─'.repeat(width) });
-  rows.push({ text: truncateToWidth('↑/↓ move  x remove  Tab browse  q quit', width) });
+  rows.push({ text: truncateToWidth('↑/↓ move  x cancel (aborts a downloading job)  Tab browse  q quit', width) });
   return rows;
 }
 

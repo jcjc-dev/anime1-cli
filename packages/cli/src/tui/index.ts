@@ -198,7 +198,7 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
           case 'x': {
             const job = jobs[queueCursor];
             if (job) {
-              queue.remove(job.id);
+              queue.cancel(job.id);
               queueCursor = clamp(queueCursor, queue.snapshot().length);
             }
             break;
