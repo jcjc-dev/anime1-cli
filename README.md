@@ -110,9 +110,11 @@ anime1 --list --year 2026 --season spring
 | `--tui` | Open the columnar terminal browser: arrow keys move between panes, Enter drills in, backspace goes back; `d` queues a selection and downloads run in the background while you keep browsing |
 
 In the TUI the current section (year › season › series) is shown in the title,
-the active column is marked with `▸`, and long lists scroll within the terminal
+the active column is marked with `▸`, and the highlight follows only the selected
+cell (column × row), never the whole line. Long lists scroll within the terminal
 (`↑/↓` to move, `PgUp/PgDn` to page, `Home/End` to jump, `▲/▼` in a column header
-show which way more items are).
+show which way more items are). On the episodes pane, `Space` toggles one episode
+and `a` selects / unselects all of them.
 | `--min-interval <ms>` | Smallest gap between requests (default 250) |
 | `--user-agent <ua>` | Custom User-Agent, if Cloudflare gets in the way |
 | `--cf-clearance <cookie>` | `cf_clearance` cookie, if Cloudflare gets in the way |

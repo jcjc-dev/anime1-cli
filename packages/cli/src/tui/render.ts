@@ -1,8 +1,9 @@
-// Pure column renderer for the TUI. Produces plain-text screen rows; the shell
-// applies ANSI styling (inverting highlighted rows) when drawing. Height-aware:
-// each pane is a scrollable viewport whose window tracks the cursor, so long
-// lists never overflow the terminal. A breadcrumb in the title and a highlighted
-// active column make it obvious which section you are in. No I/O.
+// Pure column renderer for the TUI. Produces plain-text screen rows plus, for
+// each row, the character ranges to highlight (reverse-video) so the shell can
+// highlight exactly the selected cell (column x row) rather than a whole line.
+// Height-aware: each pane is a scrollable viewport whose window tracks its own
+// cursor. A breadcrumb and a highlighted active-column header make it obvious
+// which section you are in. No I/O.
 
 import type { Anime, Episode } from 'anime1-core';
 import { SEASON_EN } from 'anime1-core';
@@ -20,10 +21,16 @@ export interface RenderContext {
   jobs?: Job[];
 }
 
+/** A character range (in the row's plain text) to render in reverse video. */
+export interface HighlightRange {
+  start: number;
+  end: number;
+}
+
 export interface ScreenRow {
   text: string;
-  /** Highlighted (inverted) when it is the active column's header or cursor. */
-  highlight?: boolean;
+  /** Character ranges to highlight — usually just the selected cell, never the whole line. */
+  ranges?: HighlightRange[];
 }
 
 const PANE_HEADERS: Record<PaneKind, string> = {
@@ -83,10 +90,22 @@ function selectedCount(state: BrowseState): number {
   return state.selectedEpisodeIndexes.size;
 }
 
-/** A per-column cell at a given browse row (empty when out of range). */
+/** A single column cell: padded text plus whether it should be highlighted. */
 interface Cell {
   text: string;
   highlight: boolean;
+}
+
+/** Assembles a row from its cells and records per-cell highlight ranges. */
+function assembleRow(cells: Cell[]): ScreenRow {
+  let text = '';
+  const ranges: HighlightRange[] = [];
+  for (const cell of cells) {
+    const start = text.length;
+    text += cell.text;
+    if (cell.highlight) ranges.push({ start, end: text.length });
+  }
+  return ranges.length > 0 ? { text, ranges } : { text };
 }
 
 function cellAt(
@@ -99,8 +118,7 @@ function cellAt(
   const item = window.visible[row];
   if (item === undefined) {
     // Pad empty cells to the full column width so shorter columns never collapse
-    // and push later columns into their space (keeps each column aligned and
-    // paginating independently).
+    // and push later columns into their space.
     return { text: ' '.repeat(width), highlight: false };
   }
   return {
@@ -134,6 +152,7 @@ export function renderBrowse(ctx: RenderContext): ScreenRow[] {
   ];
   const cursors = [state.yearCursor, state.seasonCursor, state.seriesCursor, state.episodeCursor];
   const activeColumn = state.active;
+  const lengths = [years.length, seasons.length, series.length, episodes.length];
 
   const rows: ScreenRow[] = [];
 
@@ -147,23 +166,20 @@ export function renderBrowse(ctx: RenderContext): ScreenRow[] {
   rows.push({ text: truncateToWidth(title, width) });
   rows.push({ text: '─'.repeat(width) });
 
-  // Column header row: the active column is marked with ▸ and highlighted;
-  // ▲/▼ show whether that column can scroll further up/down.
-  const lengths = [years.length, seasons.length, series.length, episodes.length];
+  // Column header row: only the active column's header is highlighted (plus ▸).
   const headerCells = (['years', 'seasons', 'series', 'episodes'] as PaneKind[]).map((kind, i) => {
     const label = `${i === activeColumn ? '▸ ' : ''}${PANE_HEADERS[kind]}${scrollMarkers(windows[i], lengths[i])}`;
-    return padOrTruncate(label, colWidth);
+    return { text: padOrTruncate(label, colWidth), highlight: i === activeColumn };
   });
-  rows.push({ text: headerCells.join(''), highlight: true });
+  rows.push(assembleRow(headerCells));
 
-  // Item rows: each pane is a scrollable viewport window.
+  // Item rows: each pane is a scrollable viewport window; only the cursor cell
+  // (active column, cursor row) is highlighted.
   for (let r = 0; r < pageHeight; r++) {
     const cells = (['years', 'seasons', 'series', 'episodes'] as PaneKind[]).map((_, i) =>
       cellAt(windows[i], r, cursors[i], i === activeColumn, colWidth),
     );
-    const text = cells.map((c) => c.text).join('');
-    const highlight = cells.some((c) => c.highlight);
-    rows.push({ text, highlight: highlight || undefined });
+    rows.push(assembleRow(cells));
   }
 
   // Queue panel.
@@ -188,13 +204,13 @@ export function renderBrowse(ctx: RenderContext): ScreenRow[] {
   const picked = selectedCount(state);
   const footer =
     `←/→ move  ↑/↓ select  PgUp/PgDn page  Home/End jump  Enter drill/select  ` +
-    `Space toggle  Backspace back  d queue${picked > 0 ? ` (${picked})` : ''}  q quit`;
+    `Space toggle  a all/none  Backspace back  d queue${picked > 0 ? ` (${picked})` : ''}  q quit`;
   rows.push({ text: '─'.repeat(width) });
   rows.push({ text: truncateToWidth(footer, width) });
   return rows;
 }
 
-/** Returns the item under the active pane's cursor (used by the shell). */
+/** Returns the item under the active pane cursor (used by the shell). */
 export function seriesTitle(series: Anime): string {
   return `${series.title}  (${series.episodes})`;
 }

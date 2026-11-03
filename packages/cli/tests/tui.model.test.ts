@@ -14,6 +14,7 @@ import {
   queueDownload,
   setEpisodes,
   toggleEpisode,
+  toggleSelectAll,
   typeFilter,
 } from '../src/tui/model.js';
 import type { ActionResult } from '../src/tui/model.js';
@@ -257,5 +258,27 @@ describe('paging and jumping', () => {
     s = moveRight(s).state;
     s = moveRight(s).state;
     expect(pageUp(s, 3).state.seriesCursor).toBe(0);
+  });
+});
+
+describe('toggleSelectAll', () => {
+  it('selects every episode when none are selected', () => {
+    const { state } = reachEpisodes();
+    const next = toggleSelectAll(state).state;
+    expect(next.selectedEpisodeIndexes.size).toBe(3);
+  });
+
+  it('selects the rest when only some are selected', () => {
+    const { state } = reachEpisodes();
+    let s = toggleEpisode(state, 0).state;
+    const next = toggleSelectAll(s).state;
+    expect(next.selectedEpisodeIndexes.size).toBe(3);
+  });
+
+  it('unselects everything when all are already selected', () => {
+    const { state } = reachEpisodes();
+    const all = toggleSelectAll(state).state;
+    const next = toggleSelectAll(all).state;
+    expect(next.selectedEpisodeIndexes.size).toBe(0);
   });
 });

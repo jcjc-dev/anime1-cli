@@ -265,6 +265,20 @@ export function toggleEpisode(state: BrowseState, index: number): Step {
   return { state: next, action: { type: 'none' } };
 }
 
+/**
+ * Selects all episodes, or unselects all when every episode is already selected.
+ * A handy way to grab (or un-grab) an entire series in one keypress.
+ */
+export function toggleSelectAll(state: BrowseState): Step {
+  const next = { ...state, selectedEpisodeIndexes: new Set<number>() };
+  const count = state.episodes.length;
+  const allSelected = count > 0 && state.selectedEpisodeIndexes.size === count;
+  if (!allSelected) {
+    for (let i = 0; i < count; i++) next.selectedEpisodeIndexes.add(i);
+  }
+  return { state: next, action: { type: 'none' } };
+}
+
 /** Rebuilds the (filtered) series list from the typed filter text. */
 function applyFilter(state: BrowseState, filter: string): BrowseState {
   const next = { ...state, filter };

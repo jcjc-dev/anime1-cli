@@ -23,10 +23,12 @@ import {
   queueDownload,
   setEpisodes,
   toggleEpisode,
+  toggleSelectAll,
   typeFilter,
 } from './model.js';
 import type { ActionResult, BrowseState } from './model.js';
 import { computePageHeight, renderBrowse } from './render.js';
+import type { ScreenRow } from './render.js';
 
 export interface TuiOptions {
   net: NetOptions;
@@ -77,10 +79,24 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
       const rows = renderBrowse({ state, width: width(), height: height(), message, jobs: queue.snapshot() });
       process.stdout.write(`${ESC}c${ESC}[?25l`);
       for (const row of rows) {
-        const text = row.highlight ? `${REVERSE}${row.text}${RESET}` : row.text;
-        process.stdout.write(`${text}\n`);
+        process.stdout.write(renderRow(row) + '\n');
       }
     };
+
+    /**
+     * Applies reverse-video only to the row's highlighted ranges (the selected
+     * cell), never the whole line.
+     */
+    function renderRow(row: ScreenRow): string {
+      if (!row.ranges || row.ranges.length === 0) return row.text;
+      let out = '';
+      let last = 0;
+      for (const range of row.ranges) {
+        out += row.text.slice(last, range.start) + REVERSE + row.text.slice(range.start, range.end) + RESET;
+        last = range.end;
+      }
+      return out + row.text.slice(last);
+    }
 
     /** Coalesces rapid queue updates into at most one redraw per interval. */
     function scheduleDraw(): void {
@@ -152,6 +168,7 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
             return;
           }
           if (key.name === 'd' && state.active === 3) step = queueDownload(state);
+          else if (key.name === 'a' && state.active === 3) step = toggleSelectAll(state);
           else if (key.name === 'q' && state.active !== 2) {
             finish();
             return;

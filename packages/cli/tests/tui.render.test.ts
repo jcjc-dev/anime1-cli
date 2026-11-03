@@ -77,15 +77,22 @@ describe('renderBrowse', () => {
     const rows = renderBrowse(ctx(createBrowseState(catalog, './downloads')));
     expect(textOf(rows)).toContain('▸ Years');
     const header = rows.find((r) => r.text.startsWith('▸'));
-    expect(header?.highlight).toBe(true);
+    expect(header?.ranges?.length).toBeGreaterThan(0);
   });
 
-  it('highlights exactly one item row (the active cursor)', () => {
+  it('highlights only the cursor cell, not the whole row', () => {
     const rows = renderBrowse(ctx(createBrowseState(catalog, './downloads')));
-    const itemHighlights = rows.filter((r) => r.highlight && !r.text.startsWith('▸')).length;
-    expect(itemHighlights).toBe(1);
-    const cursor = rows.find((r) => r.highlight && !r.text.startsWith('▸'));
-    expect(cursor?.text).toContain('2025');
+    // Header row highlights just the active column's header cell.
+    const header = rows.find((r) => r.text.startsWith('▸'));
+    expect(header?.ranges).toHaveLength(1);
+    expect(header!.ranges![0].end - header!.ranges![0].start).toBeLessThan(header!.text.length);
+    // Exactly one item row carries a highlight range: the cursor cell.
+    const itemRows = rows.filter((r) => !r.text.startsWith('▸') && (r.ranges?.length ?? 0) > 0);
+    expect(itemRows).toHaveLength(1);
+    const row = itemRows[0];
+    const range = row.ranges![0];
+    expect(row.text.slice(range.start, range.end)).toContain('2025');
+    expect(range.end - range.start).toBeLessThan(row.text.length);
   });
 
   it('marks selected episodes with [x]', () => {
