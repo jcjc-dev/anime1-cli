@@ -3,11 +3,12 @@ import type { Anime, Episode } from 'anime1-core';
 import {
   createBrowseState,
   goEnd,
+  moveDown,
   moveRight,
   setEpisodes,
   toggleEpisode,
 } from '../src/tui/model.js';
-import { computePageHeight, renderBrowse } from '../src/tui/render.js';
+import { activeMarquee, computePageHeight, renderBrowse } from '../src/tui/render.js';
 import { displayWidth } from '../src/ui.js';
 
 const anime = (catId: number, title: string, year: string, season: string): Anime => ({
@@ -234,5 +235,57 @@ describe('styled title bar', () => {
     expect(title.text).toContain('2025 › 夏 Summer › Alpha');
     // Padded to the full width so the colored bar spans the whole line.
     expect(displayWidth(title.text)).toBe(100);
+  });
+});
+
+describe('overflow and marquee', () => {
+  const longTitle = '人妻的嘴唇嚐起來有罐裝沙瓦的味道超級長';
+  const big = [
+    anime(1, '9-nine- 支配者的王冠', '2025', '夏'),
+    anime(2, longTitle, '2025', '夏'),
+    anime(3, '公爵千金的家庭教師', '2025', '夏'),
+  ];
+
+  it('pads every cell to the exact column width so later columns never shift', () => {
+    let s = createBrowseState(big, './downloads');
+    s = moveRight(s).state; // seasons
+    s = moveRight(s).state; // series pane
+    s = moveDown(s).state; // cursor on the long title
+    const colWidth = Math.max(8, Math.floor((120 - 6) / 4));
+    const rows = renderBrowse({ state: s, width: 120, height: 24 });
+    // Every item row spans exactly 4 columns of width (no gap from truncation).
+    for (const row of rows) {
+      if (row.style) continue; // title/header/footer rows use width padding too
+      if (/^[─ ]+$/.test(row.text)) continue; // separators are intentionally full-width
+      if (!row.text.trim()) continue;
+      expect(displayWidth(row.text)).toBe(4 * colWidth);
+    }
+  });
+
+  it('marquees the selected overflow cell at the exact column width and scrolls over time', () => {
+    let s = createBrowseState(big, './downloads');
+    s = moveRight(s).state;
+    s = moveRight(s).state;
+    s = moveDown(s).state; // cursor on the long title
+    const colWidth = Math.max(8, Math.floor((120 - 6) / 4));
+    const at = (now: number) =>
+      renderBrowse({ state: s, width: 120, height: 24, now }).find((r) => (r.ranges?.length ?? 0) > 0)!;
+    const a = at(0);
+    const b = at(5000);
+    expect(a).toBeDefined();
+    // Always the full 4-column width so alignment is never lost while animating.
+    expect(displayWidth(a.text)).toBe(4 * colWidth);
+    expect(displayWidth(b.text)).toBe(4 * colWidth);
+    // The text actually slides (different visible slice at a later time).
+    expect(a.text).not.toBe(b.text);
+  });
+
+  it('activeMarquee detects only when the active cursor overflows', () => {
+    let s = createBrowseState(big, './downloads');
+    s = moveRight(s).state;
+    s = moveRight(s).state; // cursor on first (short) series
+    expect(activeMarquee(s, 120)).toBe(false);
+    s = moveDown(s).state; // cursor on the long series
+    expect(activeMarquee(s, 120)).toBe(true);
   });
 });

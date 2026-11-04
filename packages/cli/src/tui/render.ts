@@ -7,7 +7,7 @@
 
 import type { Anime, Episode } from 'anime1-core';
 import { SEASON_EN } from 'anime1-core';
-import { displayWidth, renderProgress, truncateToWidth } from '../ui.js';
+import { charWidth, displayWidth, renderProgress, truncateToWidth } from '../ui.js';
 import type { Job } from '../downloader.js';
 import type { BrowseState, PaneKind } from './model.js';
 
@@ -23,6 +23,8 @@ export interface RenderContext {
   mode?: 'browse' | 'queue';
   /** Cursor into the queue list when mode === 'queue'. */
   queueCursor?: number;
+  /** Current wall-clock time (ms) — drives the marquee animation for overflow titles. */
+  now?: number;
 }
 
 /** A character range (in the row's plain text) to render in reverse video. */
@@ -47,6 +49,8 @@ const PANE_HEADERS: Record<PaneKind, string> = {
 };
 
 const SPACING = 2;
+const MARQUEE_TICK_MS = 130; // columns of scroll per second
+const MARQUEE_GAP = 8; // columns of blank before the overflow title loops back
 
 /**
  * How many item rows fit in the browse area for a given terminal height and
@@ -62,7 +66,31 @@ export function computePageHeight(height: number, jobCount: number): number {
 function padOrTruncate(text: string, width: number): string {
   const w = displayWidth(text);
   if (w <= width) return text + ' '.repeat(width - w);
-  return truncateToWidth(text, width);
+  // Truncated text can be narrower than `width` (the next glyph wouldn't fit);
+  // pad it back up so every cell is exactly `width` columns and the columns to
+  // its right never shift (this was the episodes-alignment bug).
+  const t = truncateToWidth(text, width);
+  return t + ' '.repeat(width - displayWidth(t));
+}
+
+/** Extracts `width` display columns from `s` starting at display column `startCol`. */
+function sliceColumns(s: string, startCol: number, width: number): string {
+  let col = 0;
+  let i = 0;
+  while (i < s.length && col < startCol) {
+    col += charWidth(s.codePointAt(i)!);
+    i++;
+  }
+  let out = '';
+  let taken = 0;
+  while (i < s.length && taken < width) {
+    const cw = charWidth(s.codePointAt(i)!);
+    if (taken + cw > width) break;
+    out += s[i];
+    taken += cw;
+    i++;
+  }
+  return out + ' '.repeat(width - taken);
 }
 
 /** Computes a centered window of `pageHeight` items around the cursor. */
@@ -120,6 +148,7 @@ function cellAt(
   cursor: number,
   isActive: boolean,
   width: number,
+  now?: number,
 ): Cell {
   const item = window.visible[row];
   if (item === undefined) {
@@ -127,10 +156,16 @@ function cellAt(
     // and push later columns into their space.
     return { text: ' '.repeat(width), highlight: false };
   }
-  return {
-    text: padOrTruncate(item, width),
-    highlight: isActive && window.start + row === cursor,
-  };
+  const isCursor = isActive && window.start + row === cursor;
+  // Marquee: animate the selected cell when its content overflows the column,
+  // sliding the text through with a gap before it loops.
+  if (isCursor && now != null && displayWidth(item) > width) {
+    const ticker = item + ' '.repeat(MARQUEE_GAP);
+    const cycle = displayWidth(ticker);
+    const pos = Math.floor((now / MARQUEE_TICK_MS) % cycle);
+    return { text: sliceColumns(ticker, pos, width), highlight: true };
+  }
+  return { text: padOrTruncate(item, width), highlight: isCursor };
 }
 
 function scrollMarkers(window: { start: number; end: number }, length: number): string {
@@ -185,7 +220,7 @@ export function renderBrowse(ctx: RenderContext): ScreenRow[] {
   // (active column, cursor row) is highlighted.
   for (let r = 0; r < pageHeight; r++) {
     const cells = (['years', 'seasons', 'series', 'episodes'] as PaneKind[]).map((_, i) =>
-      cellAt(windows[i], r, cursors[i], i === activeColumn, colWidth),
+      cellAt(windows[i], r, cursors[i], i === activeColumn, colWidth, ctx.now),
     );
     rows.push(assembleRow(cells));
   }
@@ -260,4 +295,21 @@ export function seriesTitle(series: Anime): string {
 
 export function episodeLabel(episode: Episode): string {
   return episode.title;
+}
+
+/**
+ * True when the active pane's selected (cursor) cell overflows its column, i.e.
+ * a marquee is animating. The shell uses this to run/stop the animation timer.
+ */
+export function activeMarquee(state: BrowseState, width: number): boolean {
+  const colWidth = Math.max(8, Math.floor((width - SPACING * (4 - 1)) / 4));
+  const lines = [
+    state.years.map((year) => (year === state.selectedYear ? `› ${year}` : year)),
+    state.seasons.map((season) => `${season} ${SEASON_EN[season] ?? ''}`.trim()),
+    seriesLines(state),
+    episodeLines(state),
+  ];
+  const cursors = [state.yearCursor, state.seasonCursor, state.seriesCursor, state.episodeCursor];
+  const item = lines[state.active][cursors[state.active]];
+  return item != null && displayWidth(item) > colWidth;
 }

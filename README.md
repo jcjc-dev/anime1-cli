@@ -113,7 +113,9 @@ In the TUI the current section (year › season › series) is shown in the titl
 the active column is marked with `▸`, and the highlight follows only the selected
 cell (column × row), never the whole line. Long lists scroll within the terminal
 (`↑/↓` to move, `PgUp/PgDn` to page, `Home/End` to jump, `▲/▼` in a column header
-show which way more items are). On the episodes pane, `Space` toggles one episode
+show which way more items are). Long titles that overflow a column are trimmed
+to the exact column width (so columns stay aligned), and the **selected** one
+scrolls as a marquee so you can read the full name. On the episodes pane, `Space` toggles one episode
 and `a` selects / unselects all of them. Episode lists are cached for 5 minutes,
 so re-entering a series doesn't re-fetch; press `r` to force a reload — for the
 current series' episodes on the episodes pane, or for the whole catalogue on any

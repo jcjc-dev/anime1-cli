@@ -28,7 +28,7 @@ import {
   typeFilter,
 } from './model.js';
 import type { ActionResult, BrowseState } from './model.js';
-import { computePageHeight, renderBrowse } from './render.js';
+import { activeMarquee, computePageHeight, renderBrowse } from './render.js';
 import type { ScreenRow } from './render.js';
 
 export interface TuiOptions {
@@ -90,6 +90,7 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
     let lastDraw = 0;
     let pendingDraw: ReturnType<typeof setTimeout> | null = null;
     let lastRows: ScreenRow[] | null = null; // last rendered frame, for incremental redraw
+    let animTimer: ReturnType<typeof setInterval> | null = null; // marquee animation
 
     // Episode cache keyed by series catId, so re-entering a pane doesn't re-fetch.
     const episodeCache = new Map<number, { episodes: Episode[]; at: number }>();
@@ -115,6 +116,7 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
         jobs: queue.snapshot(),
         mode,
         queueCursor,
+        now: Date.now(),
       });
 
       // First frame: clear the whole (alternate) screen once.
@@ -133,7 +135,21 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
         process.stdout.write(`${ESC}[${i + 1};1H` + (row ? renderRow(row) + `${ESC}[K` : `${ESC}[2K`));
       }
       lastRows = rows;
+      syncAnim();
     };
+
+    /** Starts/stops the marquee animation timer based on whether the selected cell overflows. */
+    function syncAnim(): void {
+      const needs = mode === 'browse' && activeMarquee(state, width());
+      if (needs && animTimer === null) {
+        animTimer = setInterval(() => {
+          if (!finishing) draw();
+        }, 130);
+      } else if (!needs && animTimer !== null) {
+        clearInterval(animTimer);
+        animTimer = null;
+      }
+    }
 
     /** Stable identity of a rendered row, used to skip unchanged lines. */
     function rowKey(row: ScreenRow | undefined): string {
@@ -179,6 +195,10 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
       if (finishing) return;
       finishing = true;
       if (pendingDraw) clearTimeout(pendingDraw);
+      if (animTimer) {
+        clearInterval(animTimer);
+        animTimer = null;
+      }
       process.stdin.removeListener('keypress', onKey);
       process.stdout.removeListener('resize', onResize);
       if (process.stdin.isTTY) process.stdin.setRawMode(false);

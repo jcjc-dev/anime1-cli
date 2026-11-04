@@ -69,7 +69,7 @@ export function formatSpeed(bytesPerSecond: number): string {
 }
 
 /** Approximate terminal column width of a single code point (CJK = 2). */
-function charWidth(codePoint: number): number {
+export function charWidth(codePoint: number): number {
   if (
     (codePoint >= 0x1100 && codePoint <= 0x115f) ||
     (codePoint >= 0x2e80 && codePoint <= 0xa4cf) ||
