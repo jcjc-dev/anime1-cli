@@ -83,6 +83,7 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
     let queueCursor = 0;
     let lastDraw = 0;
     let pendingDraw: ReturnType<typeof setTimeout> | null = null;
+    let lastRows: ScreenRow[] | null = null; // last rendered frame, for incremental redraw
 
     // Episode cache keyed by series catId, so re-entering a pane doesn't re-fetch.
     const episodeCache = new Map<number, { episodes: Episode[]; at: number }>();
@@ -109,17 +110,31 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
         mode,
         queueCursor,
       });
-      // Repaint in place — no full-screen reset/clear, which is what causes the
-      // flash. Home the cursor, rewrite each line (clearing it first so a shorter
-      // line never leaves stale characters), then clear any leftover rows below.
-      process.stdout.write(`${ESC}[H`);
-      for (const row of rows) {
-        // Clear each line BEFORE writing it (cursor to column 1, erase whole line),
-        // then write the row — this removes stale content without erasing the new.
-        process.stdout.write(`${ESC}[G${ESC}[2K` + renderRow(row) + '\n');
+
+      // First frame: clear the whole (alternate) screen once.
+      if (lastRows === null) process.stdout.write(`${ESC}[2J${ESC}[H`);
+
+      // Incremental redraw: only rewrite lines whose rendered content changed, so
+      // navigating never repaints the whole screen (which is what caused the title
+      // bar to flash). Unchanged lines are left exactly as they are.
+      const count = Math.max(rows.length, lastRows?.length ?? 0);
+      for (let i = 0; i < count; i++) {
+        const row = rows[i];
+        if (lastRows !== null && i < lastRows.length && rowKey(row) === rowKey(lastRows[i])) {
+          continue;
+        }
+        // Write the new content, then erase to end-of-line — never a blank gap.
+        process.stdout.write(`${ESC}[${i + 1};1H` + (row ? renderRow(row) + `${ESC}[K` : `${ESC}[2K`));
       }
-      process.stdout.write(`${ESC}[J`);
+      lastRows = rows;
     };
+
+    /** Stable identity of a rendered row, used to skip unchanged lines. */
+    function rowKey(row: ScreenRow | undefined): string {
+      if (!row) return 'empty';
+      const ranges = (row.ranges ?? []).map((r) => `${r.start}:${r.end}`).join(',');
+      return `${row.style ?? ''}|${row.text}|${ranges}`;
+    }
 
     /**
      * Applies the row's style (title/footer/dim colors) and reverse-video only on
@@ -328,7 +343,10 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
       if (!finishing) draw();
     };
 
-    const onResize = (): void => draw();
+    const onResize = (): void => {
+      lastRows = null; // terminal geometry changed — force a full repaint
+      draw();
+    };
     emitKeypressEvents(process.stdin);
     if (process.stdin.isTTY) process.stdin.setRawMode(true);
     process.stdin.on('keypress', onKey);
