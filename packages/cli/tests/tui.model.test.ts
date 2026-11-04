@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Anime, Episode } from 'anime1-core';
 import {
   backspaceFilter,
+  beginEpisodeLoad,
   confirmDownload,
   createBrowseState,
   goEnd,
@@ -308,5 +309,23 @@ describe('replaceCatalog', () => {
     const s = createBrowseState(catalog, './x');
     const empty = replaceCatalog(s, catalog.filter((a) => a.title !== 'Alpha' && a.title !== 'Beta'));
     expect(empty.selectedSeries?.title).toBe('Gamma'); // 2025 winter fallback
+  });
+});
+
+describe('first-series episode load (regression)', () => {
+  it('entering episodes for the pre-selected first series reliably applies episodes', () => {
+    let s = createBrowseState(catalog, './x'); // Alpha pre-selected
+    s = moveRight(s).state; // seasons
+    s = moveRight(s).state; // series
+    const step = moveRight(s); // -> episodes
+    expect(step.action.type).toBe('load-episodes');
+    if (step.action.type === 'load-episodes') {
+      const loading = beginEpisodeLoad(step.state, step.action.series);
+      expect(loading.episodesLoading).toBe(true);
+      expect(loading.episodes).toEqual([]); // stale episodes cleared
+      const done = setEpisodes(loading, eps, null);
+      expect(done.episodes).toHaveLength(3);
+      expect(done.episodesLoading).toBe(false);
+    }
   });
 });

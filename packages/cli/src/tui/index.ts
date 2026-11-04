@@ -45,11 +45,13 @@ export interface TuiResult {
 }
 
 const ESC = '\x1b';
-const REVERSE = `${ESC}[7m`;
 const RESET = `${ESC}[0m`;
 const BOLD = `${ESC}[1m`;
 const DIM = `${ESC}[2m`;
-const TITLE_STYLE = `${BOLD}${ESC}[37;44m`; // bold white on blue
+// Selection highlight (cursor cell + active column header): bold black on yellow.
+const SELECT_STYLE = `${BOLD}${ESC}[30;43m`;
+// Title / breadcrumb bar: bold white on magenta — clearly distinct from selection.
+const TITLE_STYLE = `${BOLD}${ESC}[37;45m`;
 const STYLE: Record<'title' | 'footer' | 'dim', string> = {
   title: TITLE_STYLE,
   footer: DIM,
@@ -146,7 +148,7 @@ export async function runTui(catalog: Anime[], options: TuiOptions): Promise<Tui
       let out = open;
       let last = 0;
       for (const range of row.ranges) {
-        out += row.text.slice(last, range.start) + REVERSE + row.text.slice(range.start, range.end) + RESET + open;
+        out += row.text.slice(last, range.start) + SELECT_STYLE + row.text.slice(range.start, range.end) + RESET + open;
         last = range.end;
       }
       return out + row.text.slice(last) + RESET;

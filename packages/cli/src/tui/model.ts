@@ -390,17 +390,18 @@ export function setEpisodes(
 }
 
 export function beginEpisodeLoad(state: BrowseState, series: Anime): BrowseState {
-  if (state.selectedSeries?.catId !== series.catId) {
-    return {
-      ...state,
-      selectedSeries: series,
-      episodes: [],
-      episodesLoading: true,
-      episodesError: null,
-      selectedEpisodeIndexes: new Set(),
-    };
-  }
-  return { ...state, episodesLoading: true, episodesError: null };
+  // Always reset the episode pane for the series being loaded, so a re-entered
+  // (already-selected) series reliably shows its loading state then its list,
+  // never stale episodes from a previous selection.
+  return {
+    ...state,
+    selectedSeries: series,
+    episodes: [],
+    episodeCursor: 0,
+    episodesLoading: true,
+    episodesError: null,
+    selectedEpisodeIndexes: new Set(),
+  };
 }
 
 /** Items + cursor for the active pane (used by the renderer). */
