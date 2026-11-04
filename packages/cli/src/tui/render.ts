@@ -161,6 +161,17 @@ function cellAt(
   // A doubled copy makes it loop seamlessly — the text slides out to the left,
   // a small gap passes, then the next copy flows in from the right.
   if (isCursor && now != null && displayWidth(item) > width) {
+    const box = item.match(/^\[[ x]\] /); // e.g. "[ ] " / "[x] " checkbox
+    if (box) {
+      // Keep the checkbox marker fixed; marquee only the title within the rest.
+      const prefix = box[0];
+      const content = item.slice(prefix.length);
+      const inner = width - displayWidth(prefix);
+      const ticker = content + ' '.repeat(MARQUEE_GAP) + content;
+      const cycle = displayWidth(content) + MARQUEE_GAP;
+      const pos = Math.floor((now / MARQUEE_TICK_MS) % cycle);
+      return { text: prefix + sliceColumns(ticker, pos, inner), highlight: true };
+    }
     const ticker = item + ' '.repeat(MARQUEE_GAP) + item;
     const cycle = displayWidth(item) + MARQUEE_GAP;
     const pos = Math.floor((now / MARQUEE_TICK_MS) % cycle);

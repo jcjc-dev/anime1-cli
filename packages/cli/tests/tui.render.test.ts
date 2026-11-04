@@ -289,3 +289,25 @@ describe('overflow and marquee', () => {
     expect(activeMarquee(s, 120)).toBe(true);
   });
 });
+
+describe('episode checkbox marquee', () => {
+  it('keeps the [ ] checkbox fixed while only the title marquees', () => {
+    const longEp = [{ title: 'A very very long episode title that definitely overflows the episodes column width and keeps going on', number: 1, apiReq: 'a' }];
+    let s = createBrowseState(catalog, './downloads');
+    s = moveRight(s).state;
+    s = moveRight(s).state;
+    s = moveRight(s).state; // episodes pane
+    s = setEpisodes(s, longEp, null);
+    const at = (now: number) =>
+      renderBrowse({ state: s, width: 120, height: 24, now }).find((r) => (r.ranges?.length ?? 0) > 0)!;
+    const a = at(1000);
+    const b = at(5000);
+    const idxA = a.text.lastIndexOf('[');
+    const idxB = b.text.lastIndexOf('[');
+    // The checkbox marker is present and stays at the same position across frames.
+    expect(idxA).toBe(idxB);
+    expect(a.text.slice(idxA, idxA + 4)).toBe('[ ] ');
+    // While only the title scrolls (the visible text changes).
+    expect(a.text.slice(idxA)).not.toBe(b.text.slice(idxB));
+  });
+});
