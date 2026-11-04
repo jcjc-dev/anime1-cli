@@ -14,11 +14,11 @@ external system binaries.
 This is an **npm-workspaces monorepo** with two packages:
 
 - **`anime1-core`** (`packages/core`): the UI-agnostic engine (catalog, filter,
-  resolver, api, download, http). No CLI/UI dependencies. Reusable by any
-  frontend (CLI, web, desktop).
+  resolver, sources, resolve, api, pw, hls, download, http). No CLI/UI
+  dependencies. Reusable by any frontend (CLI, web, desktop).
 - **`anime1-cli`** (`packages/cli`): the terminal frontend (`bin` → `anime1`):
-  `commander`, `@inquirer/prompts`, the progress UI, and orchestration. Depends
-  on `anime1-core`.
+  `commander`, `@inquirer/prompts`, the interactive columnar TUI (browse +
+  background download queue), and orchestration. Depends on `anime1-core`.
 
 This tool is for **research and experimentation only** (see the README
 disclaimer). Do not add features that host/redistribute content or circumvent
@@ -73,8 +73,16 @@ over silencing type/lint errors.
   split compound year/season values; `normalizeSeason()`.
 - `resolver.ts`: `fetchEpisodes(catId)`: load `?cat=<id>` pages, follow
   pagination, parse each episode's `data-apireq`.
+- `sources.ts`: pure source/URL classification — `anime1.me` vs `anime1.pw`,
+  episode vs category — no network.
+- `resolve.ts`: source-agnostic router that sends an `Episode` or a URL to the
+  right per-site resolver, so frontends stay unaware of which site a URL is on.
 - `api.ts`: `resolveSource(apiReq)`: POST to `v.anime1.me/api`; returns the MP4
   URL and the short-lived `e`/`h`/`p` cookies the CDN requires.
+- `pw.ts`: anime1.pw resolver — parses the direct (signed) MP4 `<source>` from
+  each episode page and collects episodes from category pages (no API call).
+- `hls.ts`: HLS (`.m3u8`) engine — parse master/media playlists, decrypt AES-128
+  segments, and stitch them into a single `.ts`/`.mp4` with no ffmpeg.
 - `download.ts`: segmented multi-connection download with resume; falls back to
   a single resumable stream when size is unknown or small.
 - `http.ts`: shared `fetch` wrapper: browser headers, retries, `Retry-After`,
@@ -84,9 +92,20 @@ over silencing type/lint errors.
 ### `packages/cli`: `anime1-cli` (terminal frontend)
 
 - `cli.ts`: entry point / `bin`; `commander` flag parsing and orchestration.
-- `prompts.ts`: `@inquirer/prompts` interactive flows.
+- `args.ts`: flag parsing/validation helpers (`--min-interval`), output-dir
+  resolution and path safety, URL-arg splitting, series-name derivation.
+- `prompts.ts`: `@inquirer/prompts` interactive flows (the non-TUI path).
 - `ui.ts`: spinner and the in-place progress bar (speed/ETA, width-aware
   truncation so long CJK titles never wrap).
+- `downloader.ts`: UI-agnostic `DownloadQueue` — a concurrency-limited job runner
+  with status/progress and a per-job `AbortController` (used by the TUI; cancel
+  also removes a job's partial files).
+- `tui/index.ts`: the columnar terminal browser — a thin I/O shell owning raw
+  keypress handling, screen drawing, and the live download panel.
+- `tui/model.ts`: pure browse state machine (columns, cursors, selection,
+  paging) + action results; no I/O, fully unit-testable.
+- `tui/render.ts`: pure height-aware column renderer (per-column scroll
+  viewports, breadcrumb, per-cell highlight ranges, styles); no I/O.
 - `constants.ts`: CLI-only constants (`VERSION`, `MAX_CONCURRENCY`).
 
 ## How the download flow works
@@ -102,6 +121,12 @@ over silencing type/lint errors.
    the file is fetched in parallel byte-range segments and reassembled.
    Benchmarks show near-linear scaling to ~6 connections, then diminishing
    returns: hence `DEFAULT_CONNECTIONS = 6`, `MAX_CONNECTIONS = 8`.
+
+anime1.pw differs: there is no catalogue and no API — each episode page carries
+a direct (signed) MP4 `<source>`, so `pw.ts` parses it and the file downloads
+over plain HTTP with no cookies. A minority of episodes are HLS (`.m3u8`);
+`hls.ts` fetches the segments, decrypts (AES-128) if needed, and stitches them
+into one file with no ffmpeg.
 
 ## Code style and conventions
 
@@ -119,14 +144,22 @@ over silencing type/lint errors.
 - Terminal output that updates in place must stay on a single line and be
   width-aware (see `packages/cli/src/ui.ts`); never assume ASCII-only widths
   (CJK = 2 columns).
+- In the TUI, keep the pure logic (`tui/model.ts`, `tui/render.ts`) separate
+  from the terminal shell (`tui/index.ts`). Model transitions and the renderer
+  return plain data (no ANSI); only the shell emits escape codes. Highlight just
+  the selected cell (never a whole line), repaint in place on the alternate
+  screen (never send a full terminal reset per frame), and apply styles/colors
+  through the shell's `renderRow`, not inside the renderer.
 
 ## Testing conventions
 
 - Unit tests live in each package's `tests/*.test.ts` (vitest) and cover **pure
   logic**: catalog/row parsing, year/season grouping, pagination parsing, and
-  segment planning live in `packages/core`; the progress/format helpers live in
-  `packages/cli`. The CLI's vitest config aliases `anime1-core` to the engine
-  source, so CLI tests run without a build.
+  segment planning live in `packages/core`; the progress/format helpers, the
+  TUI's browse model/renderer (`tui.model.test.ts`, `tui.render.test.ts`), and
+  the download queue (`downloader.test.ts`) live in `packages/cli`. The CLI's
+  vitest config aliases `anime1-core` to the engine source, so CLI tests run
+  without a build.
 - Network-dependent code (`catalog`/`api`/`resolver`/`download` HTTP) is not unit
   tested; when verification is needed, exercise it against the live site and
   delete any downloaded files afterward.
