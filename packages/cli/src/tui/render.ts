@@ -50,7 +50,7 @@ const PANE_HEADERS: Record<PaneKind, string> = {
 
 const SPACING = 2;
 const MARQUEE_TICK_MS = 130; // columns of scroll per second
-const MARQUEE_GAP = 8; // columns of blank before the overflow title loops back
+const MARQUEE_GAP = 3; // columns of blank before the overflow title loops back
 
 /**
  * How many item rows fit in the browse area for a given terminal height and
@@ -157,11 +157,12 @@ function cellAt(
     return { text: ' '.repeat(width), highlight: false };
   }
   const isCursor = isActive && window.start + row === cursor;
-  // Marquee: animate the selected cell when its content overflows the column,
-  // sliding the text through with a gap before it loops.
+  // Marquee: animate the selected cell when its content overflows the column.
+  // A doubled copy makes it loop seamlessly — the text slides out to the left,
+  // a small gap passes, then the next copy flows in from the right.
   if (isCursor && now != null && displayWidth(item) > width) {
-    const ticker = item + ' '.repeat(MARQUEE_GAP);
-    const cycle = displayWidth(ticker);
+    const ticker = item + ' '.repeat(MARQUEE_GAP) + item;
+    const cycle = displayWidth(item) + MARQUEE_GAP;
     const pos = Math.floor((now / MARQUEE_TICK_MS) % cycle);
     return { text: sliceColumns(ticker, pos, width), highlight: true };
   }
