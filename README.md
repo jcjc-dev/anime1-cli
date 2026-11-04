@@ -125,6 +125,15 @@ dir) with its own cursor where you can move with `↑/↓`, cancel a job with `x
 (including one that is currently downloading — any partial files are removed
 from disk, while a previously completed final file is left alone), and jump
 back to browsing with Tab or Backspace.
+
+> **Provider support — an important difference between the TUI and the plain CLI:**
+> the columnar TUI (`--tui`) browses and downloads **`anime1.me` only**. It is
+> catalogue-driven, and only `anime1.me` publishes a JSON catalogue, so the
+> year/season/series browser lives entirely on anime1.me. It does **not** handle
+> `anime1.pw`. `anime1.pw` (and arbitrary URLs, episode or category, from either
+> site) is supported only in the normal CLI flow by pasting a URL, e.g.
+> `anime1 https://anime1.pw/349`. The underlying download engine is provider-
+> agnostic, but the TUI itself never surfaces anime1.pw content.
 | `--min-interval <ms>` | Smallest gap between requests (default 250) |
 | `--user-agent <ua>` | Custom User-Agent, if Cloudflare gets in the way |
 | `--cf-clearance <cookie>` | `cf_clearance` cookie, if Cloudflare gets in the way |
