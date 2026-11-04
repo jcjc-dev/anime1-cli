@@ -73,21 +73,23 @@ describe('renderBrowse', () => {
     expect(text).toContain('2025 › 夏 Summer › Alpha');
   });
 
-  it('marks the active column header with a pointer and highlights it', () => {
+  it('marks the active column header with a pointer and gives it its own style', () => {
     const rows = renderBrowse(ctx(createBrowseState(catalog, './downloads')));
     expect(textOf(rows)).toContain('▸ Years');
     const header = rows.find((r) => r.text.startsWith('▸'));
-    expect(header?.ranges?.length).toBeGreaterThan(0);
+    expect(header?.style).toBe('header');
+    // The header must NOT use the selection highlight (no ranges).
+    expect(header?.ranges?.length ?? 0).toBe(0);
   });
 
   it('highlights only the cursor cell, not the whole row', () => {
     const rows = renderBrowse(ctx(createBrowseState(catalog, './downloads')));
-    // Header row highlights just the active column's header cell.
+    // Header row has its own style, no selection highlight.
     const header = rows.find((r) => r.text.startsWith('▸'));
-    expect(header?.ranges).toHaveLength(1);
-    expect(header!.ranges![0].end - header!.ranges![0].start).toBeLessThan(header!.text.length);
+    expect(header?.style).toBe('header');
+    expect(header?.ranges?.length ?? 0).toBe(0);
     // Exactly one item row carries a highlight range: the cursor cell.
-    const itemRows = rows.filter((r) => !r.text.startsWith('▸') && (r.ranges?.length ?? 0) > 0);
+    const itemRows = rows.filter((r) => (r.ranges?.length ?? 0) > 0);
     expect(itemRows).toHaveLength(1);
     const row = itemRows[0];
     const range = row.ranges![0];

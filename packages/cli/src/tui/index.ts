@@ -48,12 +48,16 @@ const ESC = '\x1b';
 const RESET = `${ESC}[0m`;
 const BOLD = `${ESC}[1m`;
 const DIM = `${ESC}[2m`;
-// Selection highlight (cursor cell + active column header): bold black on yellow.
+const CYAN = `${ESC}[36m`;
+// Selection highlight (cursor cell): bold black on yellow.
 const SELECT_STYLE = `${BOLD}${ESC}[30;43m`;
 // Title / breadcrumb bar: bold white on magenta — clearly distinct from selection.
 const TITLE_STYLE = `${BOLD}${ESC}[37;45m`;
-const STYLE: Record<'title' | 'footer' | 'dim', string> = {
+// Column header row: bold cyan — distinct from the selection and the title bar.
+const HEADER_STYLE = `${BOLD}${CYAN}`;
+const STYLE: Record<'title' | 'header' | 'footer' | 'dim', string> = {
   title: TITLE_STYLE,
+  header: HEADER_STYLE,
   footer: DIM,
   dim: DIM,
 };

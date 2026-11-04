@@ -35,8 +35,8 @@ export interface ScreenRow {
   text: string;
   /** Character ranges to highlight — usually just the selected cell, never the whole line. */
   ranges?: HighlightRange[];
-  /** Visual style applied by the shell (title bar, footer, dimmed content). */
-  style?: 'title' | 'footer' | 'dim';
+  /** Visual style applied by the shell (title bar, footer, header, dimmed content). */
+  style?: 'title' | 'header' | 'footer' | 'dim';
 }
 
 const PANE_HEADERS: Record<PaneKind, string> = {
@@ -173,12 +173,13 @@ export function renderBrowse(ctx: RenderContext): ScreenRow[] {
   rows.push({ text: padOrTruncate(title, width), style: 'title' });
   rows.push({ text: '─'.repeat(width) });
 
-  // Column header row: only the active column's header is highlighted (plus ▸).
+  // Column header row: styled with its own color (never the selection color) so
+  // it stays distinct from the selected cell; the active column is marked with ▸.
   const headerCells = (['years', 'seasons', 'series', 'episodes'] as PaneKind[]).map((kind, i) => {
     const label = `${i === activeColumn ? '▸ ' : ''}${PANE_HEADERS[kind]}${scrollMarkers(windows[i], lengths[i])}`;
-    return { text: padOrTruncate(label, colWidth), highlight: i === activeColumn };
+    return padOrTruncate(label, colWidth);
   });
-  rows.push(assembleRow(headerCells));
+  rows.push({ text: headerCells.join(''), style: 'header' });
 
   // Item rows: each pane is a scrollable viewport window; only the cursor cell
   // (active column, cursor row) is highlighted.
